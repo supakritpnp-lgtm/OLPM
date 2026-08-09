@@ -112,6 +112,7 @@ const dmy = (s) => {
 };
 
 const PM_USERS = ["Art", "Jay", "Joon", "Pla"];
+const PROJECT_TYPES = ["Project", "Issue", "Solution", "CR", "IT Request"];
 const USER_STORAGE_KEY = "project_desk_user";
 
 function fmtLogTime(v) {
@@ -425,7 +426,7 @@ function ProjectEditForm({ fields, onChange }) {
         <LabeledInput label="Type">
           <select value={fields["Type"] || ""} onChange={(e) => set("Type", e.target.value)} style={{ ...fieldInputStyle, background: C.bg }}>
             <option value="">—</option>
-            {["Project", "Solution", "CR", "Issue"].map((t) => (
+            {PROJECT_TYPES.map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
@@ -662,7 +663,7 @@ export default function App() {
   const [editingProject, setEditingProject] = useState(false);
   const [projectEditFields, setProjectEditFields] = useState({});
   const [savingProjectEdit, setSavingProjectEdit] = useState(false);
-  const [newProject, setNewProject] = useState({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", platform: "" });
+  const [newProject, setNewProject] = useState({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", type: PROJECT_TYPES[0] });
   const [addingProject, setAddingProject] = useState(false);
 
   const loadProjects = useCallback(async () => {
@@ -984,7 +985,7 @@ export default function App() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setNewProject({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", platform: "" });
+      setNewProject({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", type: PROJECT_TYPES[0] });
       setShowAddProjectForm(false);
       await loadProjects();
       if (data.projectId) setSelectedId(data.projectId);
@@ -1297,12 +1298,15 @@ export default function App() {
                     onChange={(e) => setNewProject({ ...newProject, sales: e.target.value })}
                     style={{ flex: 1, minWidth: 160, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
                   />
-                  <input
-                    placeholder="Platform (เช่น FTS, iOV, Ceiba2)"
-                    value={newProject.platform}
-                    onChange={(e) => setNewProject({ ...newProject, platform: e.target.value })}
-                    style={{ flex: 1, minWidth: 160, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
-                  />
+                  <select
+                    value={newProject.type}
+                    onChange={(e) => setNewProject({ ...newProject, type: e.target.value })}
+                    style={{ flex: 1, minWidth: 160, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, background: C.bg }}
+                  >
+                    {PROJECT_TYPES.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
                 </div>
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                   <label style={{ flex: 1, minWidth: 160, fontSize: 11, color: C.inkMuted }}>
