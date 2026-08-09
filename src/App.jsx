@@ -11,6 +11,11 @@ import {
   ChevronLeft,
   CircleDot,
   AlertTriangle,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+  Check,
 } from "lucide-react";
 import { API_URL } from "./config.js";
 
@@ -45,17 +50,42 @@ function normalizeTask(row) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Design tokens — minimal, bright, "office desk" theme
+// ---------------------------------------------------------------------------
+
+const C = {
+  bg: "#F6F6F3",          // paper-white app background
+  surface: "#FFFFFF",     // cards, sidebar, rows
+  surfaceSoft: "#FBFBF9", // hover
+  border: "#E4E3DD",
+  borderStrong: "#D6D5CD",
+  ink: "#24262B",         // primary text
+  inkMuted: "#8B8D8F",    // secondary text
+  inkFaint: "#B7B7B0",
+  accent: "#33538F",      // stamp-ink blue
+  accentSoft: "rgba(51,83,143,0.10)",
+  amber: "#B9822E",
+  amberSoft: "rgba(185,130,46,0.12)",
+  green: "#3E8264",
+  greenSoft: "rgba(62,130,100,0.12)",
+  red: "#B85042",
+  redSoft: "rgba(184,80,66,0.12)",
+  violet: "#6E5CA6",
+  violetSoft: "rgba(110,92,166,0.12)",
+};
+
 const TYPE_META = {
-  CR: { label: "CR", icon: GitPullRequest, color: "#8B7CF6" },
-  Request: { label: "Request", icon: MessageSquarePlus, color: "#3ED9C4" },
-  Bug: { label: "Bug", icon: Bug, color: "#F2545B" },
-  Sol: { label: "Sol", icon: Wrench, color: "#F2A93B" },
+  CR: { label: "CR", icon: GitPullRequest, color: C.violet, bg: C.violetSoft },
+  Request: { label: "Request", icon: MessageSquarePlus, color: C.accent, bg: C.accentSoft },
+  Bug: { label: "Bug", icon: Bug, color: C.red, bg: C.redSoft },
+  Sol: { label: "Sol", icon: Wrench, color: C.amber, bg: C.amberSoft },
 };
 
 const STATUS_META = {
-  "Not start": { color: "#5B6B87", bg: "rgba(91,107,135,0.15)" },
-  Que: { color: "#F2A93B", bg: "rgba(242,169,59,0.15)" },
-  Done: { color: "#3ED9C4", bg: "rgba(62,217,196,0.15)" },
+  "Not start": { color: C.inkMuted, bg: "#EFEFEC" },
+  Que: { color: C.amber, bg: C.amberSoft },
+  Done: { color: C.green, bg: C.greenSoft },
 };
 
 const thb = (n) =>
@@ -68,21 +98,22 @@ const dmy = (s) => {
   return d.toLocaleDateString("th-TH", { day: "2-digit", month: "short", year: "2-digit" });
 };
 
+// Tally-mark progress — reads like a ledger checkbox row, not a gauge
 function SignalBar({ value = 0, segments = 8, height = 14 }) {
   const filled = Math.round(value * segments);
   return (
-    <div style={{ display: "flex", gap: 2, alignItems: "flex-end" }}>
+    <div style={{ display: "flex", gap: 3, alignItems: "flex-end" }}>
       {Array.from({ length: segments }).map((_, i) => {
         const isFilled = i < filled;
-        const h = height * (0.45 + (i / segments) * 0.55);
+        const h = height * (0.5 + (i / segments) * 0.5);
         return (
           <div
             key={i}
             style={{
-              width: 4,
+              width: 3.5,
               height: h,
               borderRadius: 1,
-              background: isFilled ? (value >= 1 ? "#3ED9C4" : "#F2A93B") : "#223049",
+              background: isFilled ? (value >= 1 ? C.green : C.accent) : C.border,
               transition: "background 0.2s",
             }}
           />
@@ -107,8 +138,7 @@ function TypeBadge({ type }) {
         fontFamily: "'IBM Plex Mono', monospace",
         letterSpacing: 0.3,
         color: meta.color,
-        background: `${meta.color}1A`,
-        border: `1px solid ${meta.color}33`,
+        background: meta.bg,
         whiteSpace: "nowrap",
       }}
     >
@@ -151,6 +181,13 @@ export default function App() {
   const [error, setError] = useState(null);
   const [lastSync, setLastSync] = useState(null);
   const [savingRow, setSavingRow] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newTask, setNewTask] = useState({ type: "Request", name: "", detail: "", link: "" });
+  const [addingTask, setAddingTask] = useState(false);
+  const [editingRowIndex, setEditingRowIndex] = useState(null);
+  const [editFields, setEditFields] = useState({ type: "", name: "", detail: "", link: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingRow, setDeletingRow] = useState(null);
 
   const loadProjects = useCallback(async () => {
     setLoadingProjects(true);
@@ -224,7 +261,6 @@ export default function App() {
     const nextStatus = order[(order.indexOf(task.status) + 1) % order.length];
     const nextProgress = nextStatus === "Done" ? 1 : nextStatus === "Que" ? Math.max(task.progress, 0.3) : 0;
 
-    // optimistic update
     setTasks((prev) =>
       prev.map((t) => (t.rowIndex === task.rowIndex ? { ...t, status: nextStatus, progress: nextProgress } : t))
     );
@@ -232,7 +268,7 @@ export default function App() {
     try {
       const res = await fetch(API_URL, {
         method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" }, // avoids CORS preflight to Apps Script
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({
           action: "updateTaskStatus",
           projectId: selectedId,
@@ -256,12 +292,117 @@ export default function App() {
     loadProjects();
   }
 
+  async function submitNewTask() {
+    if (!newTask.name.trim()) {
+      setError("กรอกชื่องานก่อนบันทึก");
+      return;
+    }
+    setAddingTask(true);
+    setError(null);
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "addTask",
+          projectId: selectedId,
+          task: {
+            Type: newTask.type,
+            Status: "Not start",
+            Progress: 0,
+            "Task Name": newTask.name,
+            Link: newTask.link,
+            "Task Detail": newTask.detail,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setNewTask({ type: "Request", name: "", detail: "", link: "" });
+      setShowAddForm(false);
+      await loadTasks(selectedId);
+    } catch (err) {
+      setError("เพิ่มงานไม่สำเร็จ: " + err.message);
+    } finally {
+      setAddingTask(false);
+    }
+  }
+
+  function startEdit(task) {
+    setEditingRowIndex(task.rowIndex);
+    setEditFields({ type: task.type, name: task.name, detail: task.detail, link: task.link });
+  }
+
+  function cancelEdit() {
+    setEditingRowIndex(null);
+  }
+
+  async function saveEdit(rowIndex) {
+    if (!editFields.name.trim()) {
+      setError("ชื่องานห้ามว่าง");
+      return;
+    }
+    setSavingEdit(true);
+    setError(null);
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "editTask",
+          projectId: selectedId,
+          rowIndex,
+          fields: {
+            Type: editFields.type,
+            "Task Name": editFields.name,
+            Link: editFields.link,
+            "Task Detail": editFields.detail,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.rowIndex === rowIndex
+            ? { ...t, type: editFields.type, name: editFields.name, link: editFields.link, detail: editFields.detail }
+            : t
+        )
+      );
+      setEditingRowIndex(null);
+    } catch (err) {
+      setError("บันทึกการแก้ไขไม่สำเร็จ: " + err.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function confirmDelete(task) {
+    if (!window.confirm(`ลบงาน "${task.name}" ใช่ไหม? ลบแล้วกู้คืนไม่ได้`)) return;
+    setDeletingRow(task.rowIndex);
+    setError(null);
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "deleteTask", projectId: selectedId, rowIndex: task.rowIndex }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      await loadTasks(selectedId);
+    } catch (err) {
+      setError("ลบงานไม่สำเร็จ: " + err.message);
+    } finally {
+      setDeletingRow(null);
+    }
+  }
+
   return (
     <div
       style={{
         fontFamily: "'IBM Plex Sans Thai', 'IBM Plex Sans', sans-serif",
-        background: "#0B1220",
-        color: "#E7ECF3",
+        background: C.bg,
+        color: C.ink,
         minHeight: "100vh",
         display: "flex",
         fontSize: 14,
@@ -271,8 +412,8 @@ export default function App() {
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-thumb { background: #223049; border-radius: 4px; }
-        .row-hover:hover { background: #131C2E !important; }
+        ::-webkit-scrollbar-thumb { background: ${C.borderStrong}; border-radius: 4px; }
+        .row-hover:hover { background: ${C.surfaceSoft} !important; }
         button { font-family: inherit; cursor: pointer; }
         input { font-family: inherit; }
         @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
@@ -283,28 +424,27 @@ export default function App() {
         style={{
           width: 300,
           minWidth: 300,
-          borderRight: "1px solid #182238",
+          borderRight: `1px solid ${C.border}`,
           display: "flex",
           flexDirection: "column",
-          background: "#0E1626",
+          background: C.surface,
         }}
       >
         <div style={{ padding: "20px 18px 14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <div
               style={{
-                width: 8,
-                height: 8,
+                width: 7,
+                height: 7,
                 borderRadius: "50%",
-                background: loadingProjects ? "#5B6B87" : "#3ED9C4",
-                boxShadow: loadingProjects ? "none" : "0 0 8px #3ED9C4",
+                background: loadingProjects ? C.inkFaint : C.green,
               }}
             />
-            <span style={{ fontSize: 11, letterSpacing: 1.5, color: "#7C8AA5", fontFamily: "'IBM Plex Mono', monospace" }}>
-              PROJECT CONSOLE
+            <span style={{ fontSize: 11, letterSpacing: 1.5, color: C.inkMuted, fontFamily: "'IBM Plex Mono', monospace" }}>
+              PROJECT DESK
             </span>
           </div>
-          <h1 style={{ fontSize: 19, fontWeight: 700, margin: "6px 0 0" }}>งานภายในทีม</h1>
+          <h1 style={{ fontSize: 19, fontWeight: 700, margin: "6px 0 0", letterSpacing: -0.2 }}>งานภายในทีม</h1>
         </div>
 
         <div style={{ padding: "0 18px 14px" }}>
@@ -313,25 +453,25 @@ export default function App() {
               display: "flex",
               alignItems: "center",
               gap: 8,
-              background: "#131C2E",
-              border: "1px solid #223049",
+              background: C.bg,
+              border: `1px solid ${C.border}`,
               borderRadius: 8,
               padding: "8px 10px",
             }}
           >
-            <Search size={15} color="#5B6B87" />
+            <Search size={15} color={C.inkFaint} />
             <input
               placeholder="ค้นหาโปรเจกต์ / PM"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              style={{ background: "transparent", border: "none", outline: "none", color: "#E7ECF3", fontSize: 13, width: "100%" }}
+              style={{ background: "transparent", border: "none", outline: "none", color: C.ink, fontSize: 13, width: "100%" }}
             />
           </div>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "0 10px" }}>
           {loadingProjects && (
-            <div style={{ color: "#5B6B87", fontSize: 12.5, padding: "16px 12px" }}>กำลังโหลดโปรเจกต์...</div>
+            <div style={{ color: C.inkMuted, fontSize: 12.5, padding: "16px 12px" }}>กำลังโหลดโปรเจกต์...</div>
           )}
           {!loadingProjects &&
             filteredProjects.map((p) => {
@@ -344,8 +484,8 @@ export default function App() {
                   style={{
                     width: "100%",
                     textAlign: "left",
-                    background: active ? "#152036" : "transparent",
-                    border: active ? "1px solid #2A3B5C" : "1px solid transparent",
+                    background: active ? C.accentSoft : "transparent",
+                    border: active ? `1px solid ${C.accent}33` : "1px solid transparent",
                     borderRadius: 10,
                     padding: "10px 12px",
                     marginBottom: 4,
@@ -353,11 +493,11 @@ export default function App() {
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: "#5B6B87" }}>{p.id}</span>
+                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: C.inkMuted }}>{p.id}</span>
                     <SignalBar value={p.progress} segments={5} height={10} />
                   </div>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 3, color: "#E7ECF3" }}>{p.name}</div>
-                  <div style={{ fontSize: 11.5, color: "#7C8AA5", marginTop: 2 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 3, color: C.ink }}>{p.name}</div>
+                  <div style={{ fontSize: 11.5, color: C.inkMuted, marginTop: 2 }}>
                     PM: {p.pm} {p.platform ? `· ${p.platform}` : ""}
                   </div>
                 </button>
@@ -365,7 +505,7 @@ export default function App() {
             })}
         </div>
 
-        <div style={{ padding: 16, borderTop: "1px solid #182238" }}>
+        <div style={{ padding: 16, borderTop: `1px solid ${C.border}` }}>
           <button
             onClick={handleSyncClick}
             style={{
@@ -374,19 +514,20 @@ export default function App() {
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
-              background: "#131C2E",
-              border: "1px solid #223049",
+              background: C.surface,
+              border: `1px solid ${C.border}`,
               borderRadius: 8,
               padding: "9px 10px",
-              color: "#3ED9C4",
+              color: C.accent,
               fontSize: 12.5,
               fontWeight: 600,
+              boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
             }}
           >
             <RefreshCw size={13} style={{ animation: loadingProjects || loadingTasks ? "spin 0.8s linear infinite" : "none" }} />
             {loadingProjects || loadingTasks ? "กำลังซิงก์..." : "ซิงก์กับ Google Sheet"}
           </button>
-          <div style={{ fontSize: 10.5, color: "#5B6B87", marginTop: 6, textAlign: "center", fontFamily: "'IBM Plex Mono', monospace" }}>
+          <div style={{ fontSize: 10.5, color: C.inkFaint, marginTop: 6, textAlign: "center", fontFamily: "'IBM Plex Mono', monospace" }}>
             {lastSync
               ? `อัปเดตล่าสุด ${lastSync.toLocaleDateString("th-TH", { day: "2-digit", month: "short" })} ${lastSync.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}`
               : "ยังไม่ได้ซิงก์"}
@@ -402,9 +543,9 @@ export default function App() {
               display: "flex",
               alignItems: "center",
               gap: 8,
-              background: "rgba(242,84,91,0.12)",
-              borderBottom: "1px solid rgba(242,84,91,0.3)",
-              color: "#F2545B",
+              background: C.redSoft,
+              borderBottom: `1px solid ${C.red}33`,
+              color: C.red,
               padding: "10px 32px",
               fontSize: 12.5,
             }}
@@ -416,33 +557,33 @@ export default function App() {
 
         {!selected ? (
           <>
-            <div style={{ display: "flex", gap: 24, padding: "22px 32px", borderBottom: "1px solid #182238" }}>
+            <div style={{ display: "flex", gap: 24, padding: "22px 32px", borderBottom: `1px solid ${C.border}` }}>
               {[
                 { label: "โปรเจกต์ทั้งหมด", value: totals.projects },
-                { label: "เสร็จสมบูรณ์", value: totals.done, color: "#3ED9C4" },
+                { label: "เสร็จสมบูรณ์", value: totals.done, color: C.green },
               ].map((s) => (
                 <div key={s.label}>
-                  <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", color: s.color || "#E7ECF3" }}>
+                  <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", color: s.color || C.ink }}>
                     {s.value}
                   </div>
-                  <div style={{ fontSize: 11.5, color: "#7C8AA5", marginTop: 2 }}>{s.label}</div>
+                  <div style={{ fontSize: 11.5, color: C.inkMuted, marginTop: 2 }}>{s.label}</div>
                 </div>
               ))}
             </div>
 
             <div style={{ flex: 1, overflow: "auto", padding: "8px 32px 32px" }}>
               {loadingProjects ? (
-                <div style={{ color: "#5B6B87", padding: "60px 0", textAlign: "center" }}>กำลังโหลดข้อมูลจาก Google Sheet...</div>
+                <div style={{ color: C.inkMuted, padding: "60px 0", textAlign: "center" }}>กำลังโหลดข้อมูลจาก Google Sheet...</div>
               ) : filteredProjects.length === 0 ? (
-                <div style={{ color: "#5B6B87", padding: "60px 0", textAlign: "center" }}>ไม่พบโปรเจกต์</div>
+                <div style={{ color: C.inkMuted, padding: "60px 0", textAlign: "center" }}>ไม่พบโปรเจกต์</div>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr style={{ borderBottom: "1px solid #182238" }}>
+                    <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                       {["Project", "PM", "Sales", "กำหนดส่ง", "มูลค่า", "ความคืบหน้า", ""].map((h) => (
                         <th
                           key={h}
-                          style={{ textAlign: "left", padding: "12px 10px", fontSize: 11, letterSpacing: 0.5, color: "#5B6B87", fontWeight: 600, textTransform: "uppercase" }}
+                          style={{ textAlign: "left", padding: "12px 10px", fontSize: 11, letterSpacing: 0.5, color: C.inkMuted, fontWeight: 600, textTransform: "uppercase" }}
                         >
                           {h}
                         </th>
@@ -451,20 +592,25 @@ export default function App() {
                   </thead>
                   <tbody>
                     {filteredProjects.map((p) => (
-                      <tr key={p.id} className="row-hover" onClick={() => setSelectedId(p.id)} style={{ borderBottom: "1px solid #131C2E", cursor: "pointer" }}>
+                      <tr
+                        key={p.id}
+                        className="row-hover"
+                        onClick={() => setSelectedId(p.id)}
+                        style={{ borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}
+                      >
                         <td style={{ padding: "13px 10px" }}>
                           <div style={{ fontWeight: 600 }}>{p.name}</div>
-                          <div style={{ fontSize: 11, color: "#5B6B87", fontFamily: "'IBM Plex Mono', monospace" }}>{p.id}</div>
+                          <div style={{ fontSize: 11, color: C.inkMuted, fontFamily: "'IBM Plex Mono', monospace" }}>{p.id}</div>
                         </td>
-                        <td style={{ padding: "13px 10px", color: "#B7C1D4" }}>{p.pm}</td>
-                        <td style={{ padding: "13px 10px", color: "#B7C1D4" }}>{p.sales}</td>
-                        <td style={{ padding: "13px 10px", color: "#B7C1D4", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5 }}>{dmy(p.due)}</td>
-                        <td style={{ padding: "13px 10px", color: "#B7C1D4", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5 }}>{thb(p.value)}</td>
+                        <td style={{ padding: "13px 10px", color: C.ink }}>{p.pm}</td>
+                        <td style={{ padding: "13px 10px", color: C.ink }}>{p.sales}</td>
+                        <td style={{ padding: "13px 10px", color: C.ink, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5 }}>{dmy(p.due)}</td>
+                        <td style={{ padding: "13px 10px", color: C.ink, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5 }}>{thb(p.value)}</td>
                         <td style={{ padding: "13px 10px" }}>
                           <SignalBar value={p.progress} segments={8} />
                         </td>
                         <td style={{ padding: "13px 10px", textAlign: "right" }}>
-                          <ChevronRight size={16} color="#5B6B87" />
+                          <ChevronRight size={16} color={C.inkFaint} />
                         </td>
                       </tr>
                     ))}
@@ -475,18 +621,18 @@ export default function App() {
           </>
         ) : (
           <>
-            <div style={{ padding: "20px 32px 16px", borderBottom: "1px solid #182238" }}>
+            <div style={{ padding: "20px 32px 16px", borderBottom: `1px solid ${C.border}` }}>
               <button
                 onClick={() => setSelectedId(null)}
-                style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "#5B6B87", fontSize: 12.5, marginBottom: 10, padding: 0 }}
+                style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: C.inkMuted, fontSize: 12.5, marginBottom: 10, padding: 0 }}
               >
                 <ChevronLeft size={14} /> ภาพรวมทั้งหมด
               </button>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
                 <div>
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, color: "#5B6B87" }}>{selected.id}</div>
-                  <h2 style={{ fontSize: 22, fontWeight: 700, margin: "4px 0 0" }}>{selected.name}</h2>
-                  <div style={{ fontSize: 12.5, color: "#7C8AA5", marginTop: 4 }}>
+                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, color: C.inkMuted }}>{selected.id}</div>
+                  <h2 style={{ fontSize: 22, fontWeight: 700, margin: "4px 0 0", letterSpacing: -0.2 }}>{selected.name}</h2>
+                  <div style={{ fontSize: 12.5, color: C.inkMuted, marginTop: 4 }}>
                     PM {selected.pm} · Sales {selected.sales} · กำหนดส่ง {dmy(selected.due)}
                   </div>
                 </div>
@@ -494,73 +640,199 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 6, padding: "14px 32px 0" }}>
-              {["All", "CR", "Request", "Bug", "Sol"].map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTypeFilter(t)}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: 999,
-                    border: "1px solid " + (typeFilter === t ? "#3ED9C4" : "#223049"),
-                    background: typeFilter === t ? "rgba(62,217,196,0.12)" : "transparent",
-                    color: typeFilter === t ? "#3ED9C4" : "#7C8AA5",
-                    fontSize: 12.5,
-                    fontWeight: 600,
-                  }}
-                >
-                  {t}
-                </button>
-              ))}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 32px 0", flexWrap: "wrap", gap: 10 }}>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["All", "CR", "Request", "Bug", "Sol"].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTypeFilter(t)}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: 999,
+                      border: "1px solid " + (typeFilter === t ? C.accent : C.border),
+                      background: typeFilter === t ? C.accentSoft : "transparent",
+                      color: typeFilter === t ? C.accent : C.inkMuted,
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowAddForm((v) => !v)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "7px 14px",
+                  borderRadius: 8,
+                  border: `1px solid ${showAddForm ? C.border : C.accent}`,
+                  background: showAddForm ? C.surface : C.accent,
+                  color: showAddForm ? C.inkMuted : "#fff",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                }}
+              >
+                {showAddForm ? <X size={14} /> : <Plus size={14} />}
+                {showAddForm ? "ยกเลิก" : "เพิ่มงาน"}
+              </button>
             </div>
+
+            {showAddForm && (
+              <div style={{ margin: "14px 32px 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                  <select
+                    value={newTask.type}
+                    onChange={(e) => setNewTask({ ...newTask, type: e.target.value })}
+                    style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, background: C.bg }}
+                  >
+                    {["CR", "Request", "Bug", "Sol"].map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <input
+                    placeholder="ชื่องาน"
+                    value={newTask.name}
+                    onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
+                    style={{ flex: 1, minWidth: 200, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                  />
+                </div>
+                <input
+                  placeholder="ลิงก์ (ClickUp ฯลฯ) — ไม่บังคับ"
+                  value={newTask.link}
+                  onChange={(e) => setNewTask({ ...newTask, link: e.target.value })}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, marginBottom: 10 }}
+                />
+                <textarea
+                  placeholder="รายละเอียดเพิ่มเติม — ไม่บังคับ"
+                  value={newTask.detail}
+                  onChange={(e) => setNewTask({ ...newTask, detail: e.target.value })}
+                  rows={2}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, fontFamily: "inherit", resize: "vertical", marginBottom: 12 }}
+                />
+                <button
+                  onClick={submitNewTask}
+                  disabled={addingTask}
+                  style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, opacity: addingTask ? 0.6 : 1 }}
+                >
+                  {addingTask ? "กำลังบันทึก..." : "บันทึกงานใหม่"}
+                </button>
+              </div>
+            )}
 
             <div style={{ flex: 1, overflow: "auto", padding: "16px 32px 32px" }}>
               {loadingTasks ? (
-                <div style={{ color: "#5B6B87", padding: "40px 0", textAlign: "center" }}>กำลังโหลดรายการงาน...</div>
+                <div style={{ color: C.inkMuted, padding: "40px 0", textAlign: "center" }}>กำลังโหลดรายการงาน...</div>
               ) : filteredTasks.length === 0 ? (
-                <div style={{ color: "#5B6B87", fontSize: 13, padding: "40px 0", textAlign: "center" }}>ยังไม่มีงานประเภทนี้</div>
+                <div style={{ color: C.inkMuted, fontSize: 13, padding: "40px 0", textAlign: "center" }}>ยังไม่มีงานประเภทนี้</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {filteredTasks.map((t) => (
-                    <div
-                      key={t.rowIndex}
-                      className="row-hover"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 14,
-                        background: "#0E1626",
-                        border: "1px solid #182238",
-                        borderRadius: 10,
-                        padding: "12px 14px",
-                        opacity: savingRow === t.rowIndex ? 0.6 : 1,
-                      }}
-                    >
-                      <TypeBadge type={t.type} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</div>
-                        {t.detail && (
-                          <div style={{ fontSize: 11.5, color: "#5B6B87", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {t.detail}
+                  {filteredTasks.map((t) => {
+                    const isEditing = editingRowIndex === t.rowIndex;
+                    const isDeleting = deletingRow === t.rowIndex;
+                    if (isEditing) {
+                      return (
+                        <div
+                          key={t.rowIndex}
+                          style={{ background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 10, padding: 14, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}
+                        >
+                          <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                            <select
+                              value={editFields.type}
+                              onChange={(e) => setEditFields({ ...editFields, type: e.target.value })}
+                              style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, background: C.bg }}
+                            >
+                              {["CR", "Request", "Bug", "Sol"].map((tp) => (
+                                <option key={tp} value={tp}>{tp}</option>
+                              ))}
+                            </select>
+                            <input
+                              value={editFields.name}
+                              onChange={(e) => setEditFields({ ...editFields, name: e.target.value })}
+                              style={{ flex: 1, minWidth: 200, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                            />
                           </div>
+                          <input
+                            placeholder="ลิงก์"
+                            value={editFields.link}
+                            onChange={(e) => setEditFields({ ...editFields, link: e.target.value })}
+                            style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, marginBottom: 10 }}
+                          />
+                          <textarea
+                            placeholder="รายละเอียด"
+                            value={editFields.detail}
+                            onChange={(e) => setEditFields({ ...editFields, detail: e.target.value })}
+                            rows={2}
+                            style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, fontFamily: "inherit", resize: "vertical", marginBottom: 12 }}
+                          />
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                              onClick={() => saveEdit(t.rowIndex)}
+                              disabled={savingEdit}
+                              style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 12.5, fontWeight: 600, opacity: savingEdit ? 0.6 : 1 }}
+                            >
+                              <Check size={13} /> บันทึก
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.inkMuted, fontSize: 12.5, fontWeight: 600 }}
+                            >
+                              <X size={13} /> ยกเลิก
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div
+                        key={t.rowIndex}
+                        className="row-hover"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                          background: C.surface,
+                          border: `1px solid ${C.border}`,
+                          borderRadius: 10,
+                          padding: "12px 14px",
+                          boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                          opacity: savingRow === t.rowIndex || isDeleting ? 0.5 : 1,
+                        }}
+                      >
+                        <TypeBadge type={t.type} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</div>
+                          {t.detail && (
+                            <div style={{ fontSize: 11.5, color: C.inkMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {t.detail}
+                            </div>
+                          )}
+                        </div>
+                        <SignalBar value={t.progress} segments={5} height={11} />
+                        <button onClick={() => cycleStatus(t)} disabled={savingRow === t.rowIndex}>
+                          <StatusPill status={t.status} />
+                        </button>
+                        {t.link ? (
+                          <a href={t.link} target="_blank" rel="noreferrer" style={{ color: C.inkFaint, display: "flex" }}>
+                            <ExternalLink size={15} />
+                          </a>
+                        ) : (
+                          <span style={{ width: 15 }} />
                         )}
+                        <button onClick={() => startEdit(t)} title="แก้ไข" style={{ color: C.inkFaint, display: "flex", background: "none", border: "none" }}>
+                          <Pencil size={15} />
+                        </button>
+                        <button onClick={() => confirmDelete(t)} disabled={isDeleting} title="ลบ" style={{ color: C.inkFaint, display: "flex", background: "none", border: "none" }}>
+                          <Trash2 size={15} />
+                        </button>
                       </div>
-                      <SignalBar value={t.progress} segments={5} height={11} />
-                      <button onClick={() => cycleStatus(t)} disabled={savingRow === t.rowIndex}>
-                        <StatusPill status={t.status} />
-                      </button>
-                      {t.link ? (
-                        <a href={t.link} target="_blank" rel="noreferrer" style={{ color: "#5B6B87", display: "flex" }}>
-                          <ExternalLink size={15} />
-                        </a>
-                      ) : (
-                        <span style={{ width: 15 }} />
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
-              <div style={{ fontSize: 11, color: "#3A465F", marginTop: 14, textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 14, textAlign: "center" }}>
                 คลิกที่สถานะเพื่อเปลี่ยน Not start → Que → Done — บันทึกกลับไปที่ Google Sheet ทันที
               </div>
             </div>
