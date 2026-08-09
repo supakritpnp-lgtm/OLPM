@@ -121,6 +121,32 @@ function fmtLogTime(v) {
     " " + d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
 }
 
+function toDateInputValue(v) {
+  if (!v) return "";
+  const d = new Date(v);
+  if (isNaN(d)) return "";
+  return d.toISOString().slice(0, 10);
+}
+
+const fieldInputStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  borderRadius: 8,
+  border: `1px solid ${C.border}`,
+  fontSize: 13,
+  color: C.ink,
+  fontFamily: "inherit",
+};
+
+function LabeledInput({ label, children }) {
+  return (
+    <label style={{ display: "block", marginBottom: 10 }}>
+      <div style={{ fontSize: 10.5, letterSpacing: 0.4, color: C.inkFaint, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+      {children}
+    </label>
+  );
+}
+
 // Tally-mark progress — reads like a ledger checkbox row, not a gauge
 function SignalBar({ value = 0, segments = 8, height = 14 }) {
   const filled = Math.round(value * segments);
@@ -391,6 +417,101 @@ function ProjectOverviewTab({ p }) {
   );
 }
 
+function ProjectEditForm({ fields, onChange }) {
+  const set = (key, value) => onChange({ ...fields, [key]: value });
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+      <SectionCard title="ข้อมูลพื้นฐาน">
+        <LabeledInput label="Type">
+          <select value={fields["Type"] || ""} onChange={(e) => set("Type", e.target.value)} style={{ ...fieldInputStyle, background: C.bg }}>
+            <option value="">—</option>
+            {["Project", "Solution", "CR", "Issue"].map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </LabeledInput>
+        <LabeledInput label="Project name">
+          <input value={fields["Project name"] || ""} onChange={(e) => set("Project name", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <LabeledInput label="PM">
+          <select value={fields["PM"] || ""} onChange={(e) => set("PM", e.target.value)} style={{ ...fieldInputStyle, background: C.bg }}>
+            <option value="">ไม่ระบุ</option>
+            {PM_USERS.map((u) => (
+              <option key={u} value={u}>{u}</option>
+            ))}
+          </select>
+        </LabeledInput>
+        <LabeledInput label="Sales Owner">
+          <input value={fields["Sales Owner"] || ""} onChange={(e) => set("Sales Owner", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <LabeledInput label="Start Date">
+          <input type="date" value={fields["Start Date"] || ""} onChange={(e) => set("Start Date", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <LabeledInput label="Due Date">
+          <input type="date" value={fields["Due Date"] || ""} onChange={(e) => set("Due Date", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+      </SectionCard>
+
+      <SectionCard title="มูลค่าโปรเจกต์">
+        <LabeledInput label="Project Volume">
+          <input value={fields["Project Volume"] || ""} onChange={(e) => set("Project Volume", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <LabeledInput label="Project Value">
+          <input type="number" value={fields["Project Value"] ?? ""} onChange={(e) => set("Project Value", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <LabeledInput label="Project Cost">
+          <input type="number" value={fields["Project Cost"] ?? ""} onChange={(e) => set("Project Cost", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <LabeledInput label="Project Benefit">
+          <input type="number" value={fields["Project Benefit"] ?? ""} onChange={(e) => set("Project Benefit", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 12.5, color: C.ink }}>
+          <input type="checkbox" checked={!!fields["Sale brief"]} onChange={(e) => set("Sale brief", e.target.checked)} />
+          Sale brief
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: C.ink }}>
+          <input type="checkbox" checked={!!fields["Contract/PO"]} onChange={(e) => set("Contract/PO", e.target.checked)} />
+          Contract/PO
+        </label>
+      </SectionCard>
+
+      <SectionCard title="อุปกรณ์ / Platform">
+        <LabeledInput label="GPS">
+          <input value={fields["GPS"] || ""} onChange={(e) => set("GPS", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <LabeledInput label="GPS Option">
+          <textarea rows={2} value={fields["GPS Option"] || ""} onChange={(e) => set("GPS Option", e.target.value)} style={{ ...fieldInputStyle, resize: "vertical" }} />
+        </LabeledInput>
+        <LabeledInput label="MDVR">
+          <input value={fields["MDVR"] || ""} onChange={(e) => set("MDVR", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <LabeledInput label="MDVR Option">
+          <textarea rows={2} value={fields["MDVR Option"] || ""} onChange={(e) => set("MDVR Option", e.target.value)} style={{ ...fieldInputStyle, resize: "vertical" }} />
+        </LabeledInput>
+        <LabeledInput label="Other">
+          <input value={fields["Other"] || ""} onChange={(e) => set("Other", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <LabeledInput label="Platform">
+          <input value={fields["Platform"] || ""} onChange={(e) => set("Platform", e.target.value)} style={fieldInputStyle} />
+        </LabeledInput>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 12.5, color: C.ink }}>
+          <input type="checkbox" checked={!!fields["Platform Customize"]} onChange={(e) => set("Platform Customize", e.target.checked)} />
+          Platform Customize
+        </label>
+        <LabeledInput label="Platform Dev Detail">
+          <textarea rows={2} value={fields["Platform Dev Detail"] || ""} onChange={(e) => set("Platform Dev Detail", e.target.value)} style={{ ...fieldInputStyle, resize: "vertical" }} />
+        </LabeledInput>
+      </SectionCard>
+
+      <SectionCard title="หมายเหตุ">
+        <LabeledInput label="Project Note">
+          <textarea rows={5} value={fields["Project Note"] || ""} onChange={(e) => set("Project Note", e.target.value)} style={{ ...fieldInputStyle, resize: "vertical" }} />
+        </LabeledInput>
+      </SectionCard>
+    </div>
+  );
+}
+
 
 function DashboardCard({ index, p, onClick }) {
   return (
@@ -538,6 +659,9 @@ export default function App() {
   const [deletingRow, setDeletingRow] = useState(null);
   const [showAddProjectForm, setShowAddProjectForm] = useState(false);
   const [detailTab, setDetailTab] = useState("overview"); // "overview" | "task"
+  const [editingProject, setEditingProject] = useState(false);
+  const [projectEditFields, setProjectEditFields] = useState({});
+  const [savingProjectEdit, setSavingProjectEdit] = useState(false);
   const [newProject, setNewProject] = useState({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", platform: "" });
   const [addingProject, setAddingProject] = useState(false);
 
@@ -601,6 +725,7 @@ export default function App() {
   useEffect(() => {
     if (selectedId) {
       setDetailTab("overview");
+      setEditingProject(false);
       loadTasks(selectedId);
     }
   }, [selectedId, loadTasks]);
@@ -706,6 +831,63 @@ export default function App() {
       setError("เพิ่มงานไม่สำเร็จ: " + err.message);
     } finally {
       setAddingTask(false);
+    }
+  }
+
+  function startEditProject() {
+    if (!selected) return;
+    setProjectEditFields({
+      Type: selected.type || "",
+      "Project name": selected.name || "",
+      PM: selected.pm && selected.pm !== "—" ? selected.pm : "",
+      "Sales Owner": selected.sales && selected.sales !== "—" ? selected.sales : "",
+      "Start Date": toDateInputValue(selected.start),
+      "Due Date": toDateInputValue(selected.due),
+      "Project Volume": selected.volume ?? "",
+      "Project Value": selected.value || "",
+      "Project Cost": selected.cost || "",
+      "Project Benefit": typeof selected.benefit === "number" ? selected.benefit : selected.benefit ?? "",
+      "Sale brief": !!selected.saleBrief,
+      "Contract/PO": !!selected.contractPO,
+      GPS: selected.gps || "",
+      "GPS Option": selected.gpsOption || "",
+      MDVR: selected.mdvr || "",
+      "MDVR Option": selected.mdvrOption || "",
+      Other: selected.other || "",
+      Platform: selected.platform || "",
+      "Platform Customize": !!selected.platformCustomize,
+      "Platform Dev Detail": selected.platformDevDetail || "",
+      "Project Note": selected.note || "",
+    });
+    setEditingProject(true);
+  }
+
+  function cancelEditProject() {
+    setEditingProject(false);
+  }
+
+  async function saveProjectEdit() {
+    setSavingProjectEdit(true);
+    setError(null);
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "editProjectDetail",
+          projectId: selectedId,
+          user: currentUser,
+          fields: projectEditFields,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      await loadProjects();
+      setEditingProject(false);
+    } catch (err) {
+      setError("บันทึกข้อมูลโปรเจกต์ไม่สำเร็จ: " + err.message);
+    } finally {
+      setSavingProjectEdit(false);
     }
   }
 
@@ -1234,7 +1416,7 @@ export default function App() {
                   fontWeight: 600,
                 }}
               >
-                ภาพรวมโปรเจกต์
+                รายละเอียดโปรเจกต์
               </button>
               <button
                 onClick={() => setDetailTab("task")}
@@ -1254,7 +1436,37 @@ export default function App() {
 
             {detailTab === "overview" && (
               <div style={{ flex: 1, overflow: "auto", padding: "18px 32px 32px" }}>
-                <ProjectOverviewTab p={selected} />
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+                  {editingProject ? (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={saveProjectEdit}
+                        disabled={savingProjectEdit}
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 12.5, fontWeight: 600, opacity: savingProjectEdit ? 0.6 : 1 }}
+                      >
+                        <Check size={13} /> {savingProjectEdit ? "กำลังบันทึก..." : "บันทึก"}
+                      </button>
+                      <button
+                        onClick={cancelEditProject}
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.inkMuted, fontSize: 12.5, fontWeight: 600 }}
+                      >
+                        <X size={13} /> ยกเลิก
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={startEditProject}
+                      style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.accent}`, background: "transparent", color: C.accent, fontSize: 12.5, fontWeight: 600 }}
+                    >
+                      <Pencil size={13} /> แก้ไขข้อมูล
+                    </button>
+                  )}
+                </div>
+                {editingProject ? (
+                  <ProjectEditForm fields={projectEditFields} onChange={setProjectEditFields} />
+                ) : (
+                  <ProjectOverviewTab p={selected} />
+                )}
               </div>
             )}
 
