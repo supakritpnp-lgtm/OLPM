@@ -16,6 +16,7 @@ import {
   Trash2,
   X,
   Check,
+  Menu,
 } from "lucide-react";
 import { API_URL } from "./config.js";
 
@@ -233,7 +234,7 @@ function UserGate({ onSelect }) {
       }}
     >
       <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap');`}</style>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 32, width: 340, boxShadow: "0 4px 16px rgba(0,0,0,0.05)" }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 32, width: 340, maxWidth: "90vw", boxShadow: "0 4px 16px rgba(0,0,0,0.05)" }}>
         <div style={{ fontSize: 11, letterSpacing: 1.5, color: C.inkMuted, fontFamily: "'IBM Plex Mono', monospace", marginBottom: 6 }}>
           PROJECT DESK
         </div>
@@ -269,7 +270,7 @@ function UserGate({ onSelect }) {
 function LogView({ entries, loading, onBack }) {
   return (
     <>
-      <div style={{ padding: "20px 32px 16px", borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ padding: "20px var(--page-px) 16px", borderBottom: `1px solid ${C.border}` }}>
         <button
           onClick={onBack}
           style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: C.inkMuted, fontSize: 12.5, marginBottom: 10, padding: 0 }}
@@ -281,7 +282,7 @@ function LogView({ entries, loading, onBack }) {
           บันทึกล่าสุดก่อน — เพราะระบบไม่มีการ login จึงระบุได้แค่ชื่อที่ผู้ใช้เลือกไว้เอง
         </div>
       </div>
-      <div style={{ flex: 1, overflow: "auto", padding: "16px 32px 32px" }}>
+      <div style={{ flex: 1, overflow: "auto", padding: "16px var(--page-px) var(--page-px)" }}>
         {loading ? (
           <div style={{ color: C.inkMuted, padding: "60px 0", textAlign: "center" }}>กำลังโหลด log...</div>
         ) : entries.length === 0 ? (
@@ -557,7 +558,7 @@ function DashboardCategoryPanel({ title, items, onSelect }) {
       {items.length === 0 ? (
         <div style={{ fontSize: 12.5, color: C.inkFaint, padding: "12px 0" }}>ไม่มีรายการ</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+        <div className="dash-cards-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
           {items.map((p, i) => (
             <DashboardCard key={p.id} index={i + 1} p={p} onClick={() => onSelect(p.id)} />
           ))}
@@ -603,10 +604,10 @@ function DashboardView({ projects, onSelectProject }) {
   const solutionItems = useMemo(() => projects.filter((p) => p.type === "Solution"), [projects]);
 
   return (
-    <div style={{ flex: 1, overflow: "auto", padding: "24px 32px 32px" }}>
+    <div style={{ flex: 1, overflow: "auto", padding: "24px var(--page-px) var(--page-px)" }}>
       <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 16px", letterSpacing: -0.2 }}>Project Dashboard</h2>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28 }}>
+      <div className="dash-two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28 }}>
         <DashboardCategoryPanel title="Project" items={projectItems} onSelect={onSelectProject} />
         <DashboardCategoryPanel title="Solution" items={solutionItems} onSelect={onSelectProject} />
       </div>
@@ -640,6 +641,25 @@ export default function App() {
   const [mode, setMode] = useState("dashboard"); // "dashboard" | "projects" | "log"
   const [logEntries, setLogEntries] = useState([]);
   const [loadingLog, setLoadingLog] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 860px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    if (mq.addEventListener) mq.addEventListener("change", update);
+    else mq.addListener(update);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", update);
+      else mq.removeListener(update);
+    };
+  }, []);
+
+  function goTo(fn) {
+    fn();
+    setDrawerOpen(false);
+  }
 
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -1014,24 +1034,60 @@ export default function App() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; }
+        html, body { overflow-x: hidden; }
+        :root { --page-px: 32px; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-thumb { background: ${C.borderStrong}; border-radius: 4px; }
         .row-hover:hover { background: ${C.surfaceSoft} !important; }
         button { font-family: inherit; cursor: pointer; }
         input { font-family: inherit; }
         @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+        @media (max-width: 860px) {
+          :root { --page-px: 16px; }
+          .dash-two-col { grid-template-columns: 1fr !important; }
+          .dash-cards-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important; }
+          .task-row { flex-wrap: wrap; row-gap: 8px; }
+          .hide-mobile { display: none !important; }
+        }
       `}</style>
+
+      {/* Backdrop for mobile drawer */}
+      {isMobile && drawerOpen && (
+        <div
+          onClick={() => setDrawerOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 999 }}
+        />
+      )}
 
       {/* Sidebar */}
       <aside
-        style={{
-          width: 300,
-          minWidth: 300,
-          borderRight: `1px solid ${C.border}`,
-          display: "flex",
-          flexDirection: "column",
-          background: C.surface,
-        }}
+        style={
+          isMobile
+            ? {
+                position: "fixed",
+                top: 0,
+                left: 0,
+                height: "100vh",
+                width: "82vw",
+                maxWidth: 320,
+                zIndex: 1000,
+                borderRight: `1px solid ${C.border}`,
+                display: "flex",
+                flexDirection: "column",
+                background: C.surface,
+                transform: drawerOpen ? "translateX(0)" : "translateX(-100%)",
+                transition: "transform 0.25s ease",
+                boxShadow: drawerOpen ? "2px 0 16px rgba(0,0,0,0.15)" : "none",
+              }
+            : {
+                width: 300,
+                minWidth: 300,
+                borderRight: `1px solid ${C.border}`,
+                display: "flex",
+                flexDirection: "column",
+                background: C.surface,
+              }
+        }
       >
         <div style={{ padding: "20px 18px 14px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
@@ -1069,7 +1125,7 @@ export default function App() {
 
         <div style={{ display: "flex", gap: 5, padding: "0 18px 14px" }}>
           <button
-            onClick={() => setMode("dashboard")}
+            onClick={() => goTo(() => setMode("dashboard"))}
             style={{
               flex: 1,
               padding: "7px 0",
@@ -1084,7 +1140,7 @@ export default function App() {
             Dashboard
           </button>
           <button
-            onClick={() => setMode("projects")}
+            onClick={() => goTo(() => setMode("projects"))}
             style={{
               flex: 1,
               padding: "7px 0",
@@ -1099,7 +1155,7 @@ export default function App() {
             โปรเจกต์
           </button>
           <button
-            onClick={() => setMode("log")}
+            onClick={() => goTo(() => setMode("log"))}
             style={{
               flex: 1,
               padding: "7px 0",
@@ -1147,7 +1203,7 @@ export default function App() {
               return (
                 <button
                   key={p.id}
-                  onClick={() => { setSelectedId(p.id); setMode("projects"); }}
+                  onClick={() => goTo(() => { setSelectedId(p.id); setMode("projects"); })}
                   className="row-hover"
                   style={{
                     width: "100%",
@@ -1204,7 +1260,30 @@ export default function App() {
       </aside>
 
       {/* Main */}
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, width: "100%" }}>
+        {isMobile && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "12px 16px",
+              borderBottom: `1px solid ${C.border}`,
+              background: C.surface,
+              position: "sticky",
+              top: 0,
+              zIndex: 10,
+            }}
+          >
+            <button
+              onClick={() => setDrawerOpen(true)}
+              style={{ background: "none", border: "none", display: "flex", padding: 4, color: C.ink }}
+            >
+              <Menu size={20} />
+            </button>
+            <span style={{ fontSize: 14.5, fontWeight: 700 }}>งานภายในทีม</span>
+          </div>
+        )}
         {error && (
           <div
             style={{
@@ -1214,7 +1293,7 @@ export default function App() {
               background: C.redSoft,
               borderBottom: `1px solid ${C.red}33`,
               color: C.red,
-              padding: "10px 32px",
+              padding: "10px var(--page-px)",
               fontSize: 12.5,
             }}
           >
@@ -1235,7 +1314,7 @@ export default function App() {
           <LogView entries={logEntries} loading={loadingLog} onBack={() => setMode("projects")} />
         ) : !selected ? (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "22px 32px", borderBottom: `1px solid ${C.border}`, flexWrap: "wrap", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "22px var(--page-px)", borderBottom: `1px solid ${C.border}`, flexWrap: "wrap", gap: 12 }}>
               <div style={{ display: "flex", gap: 24 }}>
                 {[
                   { label: "โปรเจกต์ทั้งหมด", value: totals.projects },
@@ -1270,7 +1349,7 @@ export default function App() {
             </div>
 
             {showAddProjectForm && (
-              <div style={{ margin: "16px 32px 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+              <div style={{ margin: "16px var(--page-px) 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
                 <div style={{ fontSize: 11, color: C.inkFaint, marginBottom: 10, fontFamily: "'IBM Plex Mono', monospace" }}>
                   รหัสโปรเจกต์จะถูกสร้างให้อัตโนมัติ (เช่น PM-{new Date().getFullYear().toString().slice(-2)}{String(new Date().getMonth() + 1).padStart(2, "0")}01)
                 </div>
@@ -1338,7 +1417,7 @@ export default function App() {
               </div>
             )}
 
-            <div style={{ flex: 1, overflow: "auto", padding: "8px 32px 32px" }}>
+            <div style={{ flex: 1, overflow: "auto", padding: "8px var(--page-px) var(--page-px)" }}>
               {loadingProjects ? (
                 <div style={{ color: C.inkMuted, padding: "60px 0", textAlign: "center" }}>กำลังโหลดข้อมูลจาก Google Sheet...</div>
               ) : filteredProjects.length === 0 ? (
@@ -1350,6 +1429,7 @@ export default function App() {
                       {["Project", "PM", "Sales", "กำหนดส่ง", "มูลค่า", "ความคืบหน้า", ""].map((h) => (
                         <th
                           key={h}
+                          className={h === "Sales" || h === "มูลค่า" ? "hide-mobile" : ""}
                           style={{ textAlign: "left", padding: "12px 10px", fontSize: 11, letterSpacing: 0.5, color: C.inkMuted, fontWeight: 600, textTransform: "uppercase" }}
                         >
                           {h}
@@ -1370,9 +1450,9 @@ export default function App() {
                           <div style={{ fontSize: 11, color: C.inkMuted, fontFamily: "'IBM Plex Mono', monospace" }}>{p.id}</div>
                         </td>
                         <td style={{ padding: "13px 10px", color: C.ink }}>{p.pm}</td>
-                        <td style={{ padding: "13px 10px", color: C.ink }}>{p.sales}</td>
+                        <td className="hide-mobile" style={{ padding: "13px 10px", color: C.ink }}>{p.sales}</td>
                         <td style={{ padding: "13px 10px", color: C.ink, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5 }}>{dmy(p.due)}</td>
-                        <td style={{ padding: "13px 10px", color: C.ink, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5 }}>{thb(p.value)}</td>
+                        <td className="hide-mobile" style={{ padding: "13px 10px", color: C.ink, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5 }}>{thb(p.value)}</td>
                         <td style={{ padding: "13px 10px" }}>
                           <SignalBar value={p.progress} segments={8} />
                         </td>
@@ -1388,7 +1468,7 @@ export default function App() {
           </>
         ) : (
           <>
-            <div style={{ padding: "20px 32px 16px", borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ padding: "20px var(--page-px) 16px", borderBottom: `1px solid ${C.border}` }}>
               <button
                 onClick={() => setSelectedId(null)}
                 style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: C.inkMuted, fontSize: 12.5, marginBottom: 10, padding: 0 }}
@@ -1407,7 +1487,7 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 6, padding: "14px 32px 0" }}>
+            <div style={{ display: "flex", gap: 6, padding: "14px var(--page-px) 0" }}>
               <button
                 onClick={() => setDetailTab("overview")}
                 style={{
@@ -1439,7 +1519,7 @@ export default function App() {
             </div>
 
             {detailTab === "overview" && (
-              <div style={{ flex: 1, overflow: "auto", padding: "18px 32px 32px" }}>
+              <div style={{ flex: 1, overflow: "auto", padding: "18px var(--page-px) var(--page-px)" }}>
                 <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
                   {editingProject ? (
                     <div style={{ display: "flex", gap: 8 }}>
@@ -1476,7 +1556,7 @@ export default function App() {
 
             {detailTab === "task" && (
               <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 32px 0", flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px var(--page-px) 0", flexWrap: "wrap", gap: 10 }}>
               <div style={{ display: "flex", gap: 6 }}>
                 {["All", "CR", "Request", "Bug", "Sol"].map((t) => (
                   <button
@@ -1517,7 +1597,7 @@ export default function App() {
             </div>
 
             {showAddForm && (
-              <div style={{ margin: "14px 32px 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+              <div style={{ margin: "14px var(--page-px) 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
                 <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
                   <select
                     value={newTask.type}
@@ -1558,7 +1638,7 @@ export default function App() {
               </div>
             )}
 
-            <div style={{ flex: 1, overflow: "auto", padding: "16px 32px 32px" }}>
+            <div style={{ flex: 1, overflow: "auto", padding: "16px var(--page-px) var(--page-px)" }}>
               {loadingTasks ? (
                 <div style={{ color: C.inkMuted, padding: "40px 0", textAlign: "center" }}>กำลังโหลดรายการงาน...</div>
               ) : filteredTasks.length === 0 ? (
@@ -1624,7 +1704,7 @@ export default function App() {
                     return (
                       <div
                         key={t.rowIndex}
-                        className="row-hover"
+                        className="row-hover task-row"
                         style={{
                           display: "flex",
                           alignItems: "center",
