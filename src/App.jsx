@@ -32,9 +32,22 @@ function normalizeProject(row) {
     sales: row["Sales Owner"] || "—",
     start: row["Start Date"],
     due: row["Due Date"],
+    volume: row["Project Volume"],
     value: Number(row["Project Value"]) || 0,
-    progress: Number(row["Task progress"]) || 0,
+    cost: Number(row["Project Cost"]) || 0,
+    benefit: row["Project Benefit"],
+    saleBrief: row["Sale brief"] === true,
+    contractPO: row["Contract/PO"] === true,
+    gps: row["GPS"] || "",
+    gpsOption: row["GPS Option"] || "",
+    mdvr: row["MDVR"] || "",
+    mdvrOption: row["MDVR Option"] || "",
+    other: row["Other"] || "",
     platform: row["Platform"] || "",
+    platformCustomize: row["Platform Customize"] === true,
+    platformDevDetail: row["Platform Dev Detail"] || "",
+    note: row["Project Note"] || "",
+    progress: Number(row["Task progress"]) || 0,
   };
 }
 
@@ -281,6 +294,104 @@ function LogView({ entries, loading, onBack }) {
 }
 
 
+function Field({ label, value, mono }) {
+  const empty = value === "" || value === null || value === undefined || value === "—";
+  return (
+    <div style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ fontSize: 10.5, letterSpacing: 0.4, color: C.inkFaint, textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
+      <div
+        style={{
+          fontSize: 13.5,
+          color: empty ? C.inkFaint : C.ink,
+          fontFamily: mono ? "'IBM Plex Mono', monospace" : "inherit",
+          whiteSpace: "pre-wrap",
+        }}
+      >
+        {empty ? "—" : String(value)}
+      </div>
+    </div>
+  );
+}
+
+function BoolField({ label, value }) {
+  return (
+    <div style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ fontSize: 10.5, letterSpacing: 0.4, color: C.inkFaint, textTransform: "uppercase" }}>{label}</div>
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: value ? C.green : C.inkFaint,
+          background: value ? C.greenSoft : "#EFEFEC",
+          padding: "2px 9px",
+          borderRadius: 999,
+        }}
+      >
+        {value ? "ใช่" : "ไม่ใช่"}
+      </span>
+    </div>
+  );
+}
+
+function SectionCard({ title, children }) {
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, marginBottom: 4 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function ProjectOverviewTab({ p }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+      <SectionCard title="ข้อมูลพื้นฐาน">
+        <Field label="Project ID" value={p.id} mono />
+        <Field label="Project name" value={p.name} />
+        <Field label="Type" value={p.type} />
+        <Field label="PM" value={p.pm} />
+        <Field label="Sales Owner" value={p.sales} />
+        <Field label="Start Date" value={dmy(p.start)} mono />
+        <Field label="Due Date" value={dmy(p.due)} mono />
+      </SectionCard>
+
+      <SectionCard title="มูลค่าโปรเจกต์">
+        <Field label="Project Volume" value={p.volume} mono />
+        <Field label="Project Value" value={p.value ? thb(p.value) : ""} mono />
+        <Field label="Project Cost" value={p.cost ? thb(p.cost) : ""} mono />
+        <Field label="Project Benefit" value={typeof p.benefit === "number" ? thb(p.benefit) : p.benefit} mono />
+        <BoolField label="Sale brief" value={p.saleBrief} />
+        <BoolField label="Contract/PO" value={p.contractPO} />
+      </SectionCard>
+
+      <SectionCard title="อุปกรณ์ / Platform">
+        <Field label="GPS" value={p.gps} />
+        <Field label="GPS Option" value={p.gpsOption} />
+        <Field label="MDVR" value={p.mdvr} />
+        <Field label="MDVR Option" value={p.mdvrOption} />
+        <Field label="Other" value={p.other} />
+        <Field label="Platform" value={p.platform} />
+        <BoolField label="Platform Customize" value={p.platformCustomize} />
+        <Field label="Platform Dev Detail" value={p.platformDevDetail} />
+      </SectionCard>
+
+      <SectionCard title="หมายเหตุ & ความคืบหน้า">
+        <div style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 10.5, letterSpacing: 0.4, color: C.inkFaint, textTransform: "uppercase", marginBottom: 6 }}>Task progress</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <SignalBar value={p.progress} segments={10} height={16} />
+            <span style={{ fontSize: 12.5, fontFamily: "'IBM Plex Mono', monospace", color: C.inkMuted }}>
+              {Math.round(p.progress * 100)}%
+            </span>
+          </div>
+        </div>
+        <Field label="Project Note" value={p.note} />
+      </SectionCard>
+    </div>
+  );
+}
+
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -311,6 +422,7 @@ export default function App() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingRow, setDeletingRow] = useState(null);
   const [showAddProjectForm, setShowAddProjectForm] = useState(false);
+  const [detailTab, setDetailTab] = useState("overview"); // "overview" | "task"
   const [newProject, setNewProject] = useState({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", platform: "" });
   const [addingProject, setAddingProject] = useState(false);
 
@@ -372,7 +484,10 @@ export default function App() {
   }, [loadProjects]);
 
   useEffect(() => {
-    if (selectedId) loadTasks(selectedId);
+    if (selectedId) {
+      setDetailTab("overview");
+      loadTasks(selectedId);
+    }
   }, [selectedId, loadTasks]);
 
   const selected = projects.find((p) => p.id === selectedId) || null;
@@ -968,6 +1083,45 @@ export default function App() {
               </div>
             </div>
 
+            <div style={{ display: "flex", gap: 6, padding: "14px 32px 0" }}>
+              <button
+                onClick={() => setDetailTab("overview")}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: 8,
+                  border: `1px solid ${detailTab === "overview" ? C.accent : C.border}`,
+                  background: detailTab === "overview" ? C.accentSoft : "transparent",
+                  color: detailTab === "overview" ? C.accent : C.inkMuted,
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                ภาพรวมโปรเจกต์
+              </button>
+              <button
+                onClick={() => setDetailTab("task")}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: 8,
+                  border: `1px solid ${detailTab === "task" ? C.accent : C.border}`,
+                  background: detailTab === "task" ? C.accentSoft : "transparent",
+                  color: detailTab === "task" ? C.accent : C.inkMuted,
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                งาน {tasks.length ? `(${tasks.length})` : ""}
+              </button>
+            </div>
+
+            {detailTab === "overview" && (
+              <div style={{ flex: 1, overflow: "auto", padding: "18px 32px 32px" }}>
+                <ProjectOverviewTab p={selected} />
+              </div>
+            )}
+
+            {detailTab === "task" && (
+              <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 32px 0", flexWrap: "wrap", gap: 10 }}>
               <div style={{ display: "flex", gap: 6 }}>
                 {["All", "CR", "Request", "Bug", "Sol"].map((t) => (
@@ -1164,6 +1318,8 @@ export default function App() {
                 คลิกที่สถานะเพื่อเปลี่ยน Not start → Que → Done — บันทึกกลับไปที่ Google Sheet ทันที
               </div>
             </div>
+              </>
+            )}
           </>
         )}
       </main>
