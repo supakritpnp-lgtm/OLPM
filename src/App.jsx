@@ -392,6 +392,121 @@ function ProjectOverviewTab({ p }) {
 }
 
 
+function DashboardCard({ index, p, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="row-hover"
+      style={{
+        textAlign: "left",
+        background: C.surface,
+        border: `1px solid ${C.border}`,
+        borderRadius: 10,
+        padding: "12px 14px",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: C.inkFaint, fontWeight: 700 }}>
+          {String(index).padStart(2, "0")}
+        </span>
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {p.name}
+        </span>
+        <span style={{ fontSize: 12, fontFamily: "'IBM Plex Mono', monospace", color: p.progress >= 1 ? C.green : C.accent, fontWeight: 700 }}>
+          {Math.round(p.progress * 100)}%
+        </span>
+      </div>
+      <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 4 }}>{p.value ? thb(p.value) : "—"}</div>
+    </button>
+  );
+}
+
+function DashboardCategoryPanel({ title, items, onSelect }) {
+  const totalValue = items.reduce((s, p) => s + (p.value || 0), 0);
+  return (
+    <SectionCard title="">
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>
+          {title} : <span style={{ color: C.accent }}>{items.length}</span>
+        </div>
+        <div style={{ fontSize: 12, color: C.inkMuted, marginTop: 2 }}>Value : {thb(totalValue)}</div>
+      </div>
+      {items.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: C.inkFaint, padding: "12px 0" }}>ไม่มีรายการ</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+          {items.map((p, i) => (
+            <DashboardCard key={p.id} index={i + 1} p={p} onClick={() => onSelect(p.id)} />
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function WorkLoadRow({ pm, projectItems, solutionItems }) {
+  const pStats = { count: projectItems.length, value: projectItems.reduce((s, p) => s + (p.value || 0), 0) };
+  const sStats = { count: solutionItems.length, value: solutionItems.reduce((s, p) => s + (p.value || 0), 0) };
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "90px 1fr 1fr",
+        alignItems: "center",
+        gap: 16,
+        padding: "12px 16px",
+        borderBottom: `1px solid ${C.border}`,
+      }}
+    >
+      <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>{pm}</div>
+      <div>
+        <div style={{ fontSize: 12.5, color: C.ink }}>
+          Project : <span style={{ fontWeight: 700, color: C.accent }}>{pStats.count}</span>
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 1 }}>{thb(pStats.value)}</div>
+      </div>
+      <div>
+        <div style={{ fontSize: 12.5, color: C.ink }}>
+          Solution : <span style={{ fontWeight: 700, color: C.violet }}>{sStats.count}</span>
+        </div>
+        <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 1 }}>{thb(sStats.value)}</div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardView({ projects, onSelectProject }) {
+  const projectItems = useMemo(() => projects.filter((p) => p.type === "Project"), [projects]);
+  const solutionItems = useMemo(() => projects.filter((p) => p.type === "Solution"), [projects]);
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: "24px 32px 32px" }}>
+      <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 16px", letterSpacing: -0.2 }}>Project Dashboard</h2>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28 }}>
+        <DashboardCategoryPanel title="Project" items={projectItems} onSelect={onSelectProject} />
+        <DashboardCategoryPanel title="Solution" items={solutionItems} onSelect={onSelectProject} />
+      </div>
+
+      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 20 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px", color: C.ink }}>Work Load</h3>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+          {PM_USERS.map((pm) => (
+            <WorkLoadRow
+              key={pm}
+              pm={pm}
+              projectItems={projectItems.filter((p) => p.pm === pm)}
+              solutionItems={solutionItems.filter((p) => p.pm === pm)}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -400,7 +515,7 @@ export default function App() {
       return null;
     }
   });
-  const [mode, setMode] = useState("projects"); // "projects" | "log"
+  const [mode, setMode] = useState("dashboard"); // "dashboard" | "projects" | "log"
   const [logEntries, setLogEntries] = useState([]);
   const [loadingLog, setLoadingLog] = useState(false);
 
@@ -769,7 +884,22 @@ export default function App() {
           <h1 style={{ fontSize: 19, fontWeight: 700, margin: "6px 0 0", letterSpacing: -0.2 }}>งานภายในทีม</h1>
         </div>
 
-        <div style={{ display: "flex", gap: 6, padding: "0 18px 14px" }}>
+        <div style={{ display: "flex", gap: 5, padding: "0 18px 14px" }}>
+          <button
+            onClick={() => setMode("dashboard")}
+            style={{
+              flex: 1,
+              padding: "7px 0",
+              borderRadius: 8,
+              border: `1px solid ${mode === "dashboard" ? C.accent : C.border}`,
+              background: mode === "dashboard" ? C.accentSoft : "transparent",
+              color: mode === "dashboard" ? C.accent : C.inkMuted,
+              fontSize: 11.5,
+              fontWeight: 600,
+            }}
+          >
+            Dashboard
+          </button>
           <button
             onClick={() => setMode("projects")}
             style={{
@@ -779,7 +909,7 @@ export default function App() {
               border: `1px solid ${mode === "projects" ? C.accent : C.border}`,
               background: mode === "projects" ? C.accentSoft : "transparent",
               color: mode === "projects" ? C.accent : C.inkMuted,
-              fontSize: 12.5,
+              fontSize: 11.5,
               fontWeight: 600,
             }}
           >
@@ -794,7 +924,7 @@ export default function App() {
               border: `1px solid ${mode === "log" ? C.accent : C.border}`,
               background: mode === "log" ? C.accentSoft : "transparent",
               color: mode === "log" ? C.accent : C.inkMuted,
-              fontSize: 12.5,
+              fontSize: 11.5,
               fontWeight: 600,
             }}
           >
@@ -910,7 +1040,15 @@ export default function App() {
           </div>
         )}
 
-        {mode === "log" ? (
+        {mode === "dashboard" ? (
+          <DashboardView
+            projects={projects}
+            onSelectProject={(id) => {
+              setSelectedId(id);
+              setMode("projects");
+            }}
+          />
+        ) : mode === "log" ? (
           <LogView entries={logEntries} loading={loadingLog} onBack={() => setMode("projects")} />
         ) : !selected ? (
           <>
