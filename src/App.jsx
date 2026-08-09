@@ -98,6 +98,16 @@ const dmy = (s) => {
   return d.toLocaleDateString("th-TH", { day: "2-digit", month: "short", year: "2-digit" });
 };
 
+const PM_USERS = ["Art", "Jay", "Joon", "Pla"];
+const USER_STORAGE_KEY = "project_desk_user";
+
+function fmtLogTime(v) {
+  const d = new Date(v);
+  if (isNaN(d)) return String(v);
+  return d.toLocaleDateString("th-TH", { day: "2-digit", month: "short", year: "2-digit" }) +
+    " " + d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+}
+
 // Tally-mark progress — reads like a ledger checkbox row, not a gauge
 function SignalBar({ value = 0, segments = 8, height = 14 }) {
   const filled = Math.round(value * segments);
@@ -170,7 +180,119 @@ function StatusPill({ status }) {
   );
 }
 
+function UserGate({ onSelect }) {
+  return (
+    <div
+      style={{
+        fontFamily: "'IBM Plex Sans Thai', 'IBM Plex Sans', sans-serif",
+        background: C.bg,
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap');`}</style>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 32, width: 340, boxShadow: "0 4px 16px rgba(0,0,0,0.05)" }}>
+        <div style={{ fontSize: 11, letterSpacing: 1.5, color: C.inkMuted, fontFamily: "'IBM Plex Mono', monospace", marginBottom: 6 }}>
+          PROJECT DESK
+        </div>
+        <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 6px", color: C.ink }}>คุณคือใคร?</h2>
+        <p style={{ fontSize: 12.5, color: C.inkMuted, margin: "0 0 18px" }}>
+          เลือกชื่อของคุณ — ใช้เพื่อบันทึกใน log ว่าใครแก้ไขอะไร (ไม่มีรหัสผ่าน)
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {PM_USERS.map((name) => (
+            <button
+              key={name}
+              onClick={() => onSelect(name)}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 9,
+                border: `1px solid ${C.border}`,
+                background: C.bg,
+                color: C.ink,
+                fontSize: 14,
+                fontWeight: 600,
+                textAlign: "left",
+              }}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LogView({ entries, loading, onBack }) {
+  return (
+    <>
+      <div style={{ padding: "20px 32px 16px", borderBottom: `1px solid ${C.border}` }}>
+        <button
+          onClick={onBack}
+          style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: C.inkMuted, fontSize: 12.5, marginBottom: 10, padding: 0 }}
+        >
+          <ChevronLeft size={14} /> โปรเจกต์
+        </button>
+        <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0, letterSpacing: -0.2 }}>Log การแก้ไข</h2>
+        <div style={{ fontSize: 12.5, color: C.inkMuted, marginTop: 4 }}>
+          บันทึกล่าสุดก่อน — เพราะระบบไม่มีการ login จึงระบุได้แค่ชื่อที่ผู้ใช้เลือกไว้เอง
+        </div>
+      </div>
+      <div style={{ flex: 1, overflow: "auto", padding: "16px 32px 32px" }}>
+        {loading ? (
+          <div style={{ color: C.inkMuted, padding: "60px 0", textAlign: "center" }}>กำลังโหลด log...</div>
+        ) : entries.length === 0 ? (
+          <div style={{ color: C.inkMuted, padding: "60px 0", textAlign: "center" }}>ยังไม่มีการแก้ไขใดๆ</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {entries.map((e, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 12,
+                  background: C.surface,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  fontSize: 12.5,
+                }}
+              >
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: C.inkFaint, fontSize: 11, minWidth: 130 }}>
+                  {fmtLogTime(e.Timestamp)}
+                </span>
+                <span style={{ fontWeight: 700, color: C.accent, minWidth: 44 }}>{e.User}</span>
+                <span style={{ color: C.ink }}>{e.Action}</span>
+                {e.Project && (
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: C.inkMuted, fontSize: 11 }}>{e.Project}</span>
+                )}
+                {e.Detail && <span style={{ color: C.inkMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>— {e.Detail}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      return localStorage.getItem(USER_STORAGE_KEY) || null;
+    } catch {
+      return null;
+    }
+  });
+  const [mode, setMode] = useState("projects"); // "projects" | "log"
+  const [logEntries, setLogEntries] = useState([]);
+  const [loadingLog, setLoadingLog] = useState(false);
+
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -188,6 +310,9 @@ export default function App() {
   const [editFields, setEditFields] = useState({ type: "", name: "", detail: "", link: "" });
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingRow, setDeletingRow] = useState(null);
+  const [showAddProjectForm, setShowAddProjectForm] = useState(false);
+  const [newProject, setNewProject] = useState({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", platform: "" });
+  const [addingProject, setAddingProject] = useState(false);
 
   const loadProjects = useCallback(async () => {
     setLoadingProjects(true);
@@ -221,6 +346,26 @@ export default function App() {
       setLoadingTasks(false);
     }
   }, []);
+
+  const loadLog = useCallback(async () => {
+    setLoadingLog(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}?action=log&limit=200`);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setLogEntries(data);
+    } catch (err) {
+      setError("โหลด log ไม่สำเร็จ: " + err.message);
+    } finally {
+      setLoadingLog(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mode === "log") loadLog();
+  }, [mode, loadLog]);
 
   useEffect(() => {
     loadProjects();
@@ -275,6 +420,7 @@ export default function App() {
           rowIndex: task.rowIndex,
           status: nextStatus,
           progress: nextProgress,
+          user: currentUser,
         }),
       });
       const data = await res.json();
@@ -288,6 +434,10 @@ export default function App() {
   }
 
   function handleSyncClick() {
+    if (mode === "log") {
+      loadLog();
+      return;
+    }
     if (selectedId) loadTasks(selectedId);
     loadProjects();
   }
@@ -306,6 +456,7 @@ export default function App() {
         body: JSON.stringify({
           action: "addTask",
           projectId: selectedId,
+          user: currentUser,
           task: {
             Type: newTask.type,
             Status: "Not start",
@@ -352,6 +503,7 @@ export default function App() {
           action: "editTask",
           projectId: selectedId,
           rowIndex,
+          user: currentUser,
           fields: {
             Type: editFields.type,
             "Task Name": editFields.name,
@@ -385,7 +537,7 @@ export default function App() {
       const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "deleteTask", projectId: selectedId, rowIndex: task.rowIndex }),
+        body: JSON.stringify({ action: "deleteTask", projectId: selectedId, rowIndex: task.rowIndex, user: currentUser }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -395,6 +547,44 @@ export default function App() {
     } finally {
       setDeletingRow(null);
     }
+  }
+
+  function selectUser(name) {
+    try {
+      if (name) localStorage.setItem(USER_STORAGE_KEY, name);
+      else localStorage.removeItem(USER_STORAGE_KEY);
+    } catch {}
+    setCurrentUser(name);
+  }
+
+  async function submitNewProject() {
+    if (!newProject.name.trim()) {
+      setError("กรอกชื่อโปรเจกต์ก่อนบันทึก");
+      return;
+    }
+    setAddingProject(true);
+    setError(null);
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "addProject", user: currentUser, project: newProject }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setNewProject({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", platform: "" });
+      setShowAddProjectForm(false);
+      await loadProjects();
+      if (data.projectId) setSelectedId(data.projectId);
+    } catch (err) {
+      setError("เพิ่มโปรเจกต์ไม่สำเร็จ: " + err.message);
+    } finally {
+      setAddingProject(false);
+    }
+  }
+
+  if (!currentUser) {
+    return <UserGate onSelect={selectUser} />;
   }
 
   return (
@@ -431,20 +621,70 @@ export default function App() {
         }}
       >
         <div style={{ padding: "20px 18px 14px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <div
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background: loadingProjects ? C.inkFaint : C.green,
+                }}
+              />
+              <span style={{ fontSize: 11, letterSpacing: 1.5, color: C.inkMuted, fontFamily: "'IBM Plex Mono', monospace" }}>
+                PROJECT DESK
+              </span>
+            </div>
+            <button
+              onClick={() => selectUser(null)}
+              title="เปลี่ยนผู้ใช้"
               style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                background: loadingProjects ? C.inkFaint : C.green,
+                fontSize: 11,
+                fontWeight: 700,
+                color: C.accent,
+                background: C.accentSoft,
+                border: "none",
+                borderRadius: 999,
+                padding: "3px 9px",
               }}
-            />
-            <span style={{ fontSize: 11, letterSpacing: 1.5, color: C.inkMuted, fontFamily: "'IBM Plex Mono', monospace" }}>
-              PROJECT DESK
-            </span>
+            >
+              {currentUser}
+            </button>
           </div>
           <h1 style={{ fontSize: 19, fontWeight: 700, margin: "6px 0 0", letterSpacing: -0.2 }}>งานภายในทีม</h1>
+        </div>
+
+        <div style={{ display: "flex", gap: 6, padding: "0 18px 14px" }}>
+          <button
+            onClick={() => setMode("projects")}
+            style={{
+              flex: 1,
+              padding: "7px 0",
+              borderRadius: 8,
+              border: `1px solid ${mode === "projects" ? C.accent : C.border}`,
+              background: mode === "projects" ? C.accentSoft : "transparent",
+              color: mode === "projects" ? C.accent : C.inkMuted,
+              fontSize: 12.5,
+              fontWeight: 600,
+            }}
+          >
+            โปรเจกต์
+          </button>
+          <button
+            onClick={() => setMode("log")}
+            style={{
+              flex: 1,
+              padding: "7px 0",
+              borderRadius: 8,
+              border: `1px solid ${mode === "log" ? C.accent : C.border}`,
+              background: mode === "log" ? C.accentSoft : "transparent",
+              color: mode === "log" ? C.accent : C.inkMuted,
+              fontSize: 12.5,
+              fontWeight: 600,
+            }}
+          >
+            Log
+          </button>
         </div>
 
         <div style={{ padding: "0 18px 14px" }}>
@@ -479,7 +719,7 @@ export default function App() {
               return (
                 <button
                   key={p.id}
-                  onClick={() => setSelectedId(p.id)}
+                  onClick={() => { setSelectedId(p.id); setMode("projects"); }}
                   className="row-hover"
                   style={{
                     width: "100%",
@@ -555,21 +795,109 @@ export default function App() {
           </div>
         )}
 
-        {!selected ? (
+        {mode === "log" ? (
+          <LogView entries={logEntries} loading={loadingLog} onBack={() => setMode("projects")} />
+        ) : !selected ? (
           <>
-            <div style={{ display: "flex", gap: 24, padding: "22px 32px", borderBottom: `1px solid ${C.border}` }}>
-              {[
-                { label: "โปรเจกต์ทั้งหมด", value: totals.projects },
-                { label: "เสร็จสมบูรณ์", value: totals.done, color: C.green },
-              ].map((s) => (
-                <div key={s.label}>
-                  <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", color: s.color || C.ink }}>
-                    {s.value}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "22px 32px", borderBottom: `1px solid ${C.border}`, flexWrap: "wrap", gap: 12 }}>
+              <div style={{ display: "flex", gap: 24 }}>
+                {[
+                  { label: "โปรเจกต์ทั้งหมด", value: totals.projects },
+                  { label: "เสร็จสมบูรณ์", value: totals.done, color: C.green },
+                ].map((s) => (
+                  <div key={s.label}>
+                    <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", color: s.color || C.ink }}>
+                      {s.value}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: C.inkMuted, marginTop: 2 }}>{s.label}</div>
                   </div>
-                  <div style={{ fontSize: 11.5, color: C.inkMuted, marginTop: 2 }}>{s.label}</div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <button
+                onClick={() => setShowAddProjectForm((v) => !v)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  border: `1px solid ${showAddProjectForm ? C.border : C.accent}`,
+                  background: showAddProjectForm ? C.surface : C.accent,
+                  color: showAddProjectForm ? C.inkMuted : "#fff",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                }}
+              >
+                {showAddProjectForm ? <X size={14} /> : <Plus size={14} />}
+                {showAddProjectForm ? "ยกเลิก" : "เพิ่มโปรเจกต์"}
+              </button>
             </div>
+
+            {showAddProjectForm && (
+              <div style={{ margin: "16px 32px 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
+                <div style={{ fontSize: 11, color: C.inkFaint, marginBottom: 10, fontFamily: "'IBM Plex Mono', monospace" }}>
+                  รหัสโปรเจกต์จะถูกสร้างให้อัตโนมัติ (เช่น PM-{new Date().getFullYear().toString().slice(-2)}{String(new Date().getMonth() + 1).padStart(2, "0")}01)
+                </div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                  <input
+                    placeholder="ชื่อโปรเจกต์"
+                    value={newProject.name}
+                    onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                    style={{ flex: 1, minWidth: 220, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                  />
+                  <select
+                    value={newProject.pm}
+                    onChange={(e) => setNewProject({ ...newProject, pm: e.target.value })}
+                    style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, background: C.bg }}
+                  >
+                    {PM_USERS.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                  <input
+                    placeholder="Sales Owner"
+                    value={newProject.sales}
+                    onChange={(e) => setNewProject({ ...newProject, sales: e.target.value })}
+                    style={{ flex: 1, minWidth: 160, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                  />
+                  <input
+                    placeholder="Platform (เช่น FTS, iOV, Ceiba2)"
+                    value={newProject.platform}
+                    onChange={(e) => setNewProject({ ...newProject, platform: e.target.value })}
+                    style={{ flex: 1, minWidth: 160, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+                  <label style={{ flex: 1, minWidth: 160, fontSize: 11, color: C.inkMuted }}>
+                    วันเริ่ม
+                    <input
+                      type="date"
+                      value={newProject.start}
+                      onChange={(e) => setNewProject({ ...newProject, start: e.target.value })}
+                      style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                    />
+                  </label>
+                  <label style={{ flex: 1, minWidth: 160, fontSize: 11, color: C.inkMuted }}>
+                    วันกำหนดส่ง
+                    <input
+                      type="date"
+                      value={newProject.due}
+                      onChange={(e) => setNewProject({ ...newProject, due: e.target.value })}
+                      style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                    />
+                  </label>
+                </div>
+                <button
+                  onClick={submitNewProject}
+                  disabled={addingProject}
+                  style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, opacity: addingProject ? 0.6 : 1 }}
+                >
+                  {addingProject ? "กำลังบันทึก..." : "สร้างโปรเจกต์"}
+                </button>
+              </div>
+            )}
 
             <div style={{ flex: 1, overflow: "auto", padding: "8px 32px 32px" }}>
               {loadingProjects ? (
@@ -595,7 +923,7 @@ export default function App() {
                       <tr
                         key={p.id}
                         className="row-hover"
-                        onClick={() => setSelectedId(p.id)}
+                        onClick={() => { setSelectedId(p.id); setMode("projects"); }}
                         style={{ borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}
                       >
                         <td style={{ padding: "13px 10px" }}>
