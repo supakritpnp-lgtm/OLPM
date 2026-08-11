@@ -130,6 +130,14 @@ function toDateInputValue(v) {
   return d.toISOString().slice(0, 10);
 }
 
+function parsePMString(s) {
+  return s ? String(s).split(",").map((x) => x.trim()).filter(Boolean) : [];
+}
+
+function hasPM(project, pmName) {
+  return parsePMString(project.pm).includes(pmName);
+}
+
 const fieldInputStyle = {
   width: "100%",
   padding: "8px 10px",
@@ -146,6 +154,38 @@ function LabeledInput({ label, children }) {
       <div style={{ fontSize: 10.5, letterSpacing: 0.4, color: C.inkFaint, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
       {children}
     </label>
+  );
+}
+
+function PMMultiSelect({ value, onChange }) {
+  function toggle(name) {
+    if (value.includes(name)) onChange(value.filter((v) => v !== name));
+    else onChange(PM_USERS.filter((u) => value.includes(u) || u === name));
+  }
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {PM_USERS.map((name) => {
+        const active = value.includes(name);
+        return (
+          <button
+            key={name}
+            type="button"
+            onClick={() => toggle(name)}
+            style={{
+              padding: "7px 13px",
+              borderRadius: 999,
+              fontSize: 12.5,
+              fontWeight: 600,
+              border: `1px solid ${active ? C.accent : C.border}`,
+              background: active ? C.accentSoft : C.bg,
+              color: active ? C.accent : C.inkMuted,
+            }}
+          >
+            {name}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -435,13 +475,8 @@ function ProjectEditForm({ fields, onChange }) {
         <LabeledInput label="Project name">
           <input value={fields["Project name"] || ""} onChange={(e) => set("Project name", e.target.value)} style={fieldInputStyle} />
         </LabeledInput>
-        <LabeledInput label="PM">
-          <select value={fields["PM"] || ""} onChange={(e) => set("PM", e.target.value)} style={{ ...fieldInputStyle, background: C.bg }}>
-            <option value="">ไม่ระบุ</option>
-            {PM_USERS.map((u) => (
-              <option key={u} value={u}>{u}</option>
-            ))}
-          </select>
+        <LabeledInput label="PM (เลือกได้มากกว่า 1 คน)">
+          <PMMultiSelect value={fields["PM"] || []} onChange={(arr) => set("PM", arr)} />
         </LabeledInput>
         <LabeledInput label="Sales Owner">
           <input value={fields["Sales Owner"] || ""} onChange={(e) => set("Sales Owner", e.target.value)} style={fieldInputStyle} />
@@ -619,8 +654,8 @@ function DashboardView({ projects, onSelectProject }) {
             <WorkLoadRow
               key={pm}
               pm={pm}
-              projectItems={projectItems.filter((p) => p.pm === pm)}
-              solutionItems={solutionItems.filter((p) => p.pm === pm)}
+              projectItems={projectItems.filter((p) => hasPM(p, pm))}
+              solutionItems={solutionItems.filter((p) => hasPM(p, pm))}
             />
           ))}
         </div>
@@ -684,7 +719,7 @@ export default function App() {
   const [projectEditFields, setProjectEditFields] = useState({});
   const [originalProjectFields, setOriginalProjectFields] = useState({});
   const [savingProjectEdit, setSavingProjectEdit] = useState(false);
-  const [newProject, setNewProject] = useState({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", type: PROJECT_TYPES[0] });
+  const [newProject, setNewProject] = useState({ name: "", pm: [PM_USERS[0]], sales: "", start: "", due: "", type: PROJECT_TYPES[0] });
   const [addingProject, setAddingProject] = useState(false);
 
   const loadProjects = useCallback(async () => {
@@ -861,7 +896,7 @@ export default function App() {
     const snapshot = {
       Type: selected.type || "",
       "Project name": selected.name || "",
-      PM: selected.pm && selected.pm !== "—" ? selected.pm : "",
+      PM: parsePMString(selected.pm && selected.pm !== "—" ? selected.pm : ""),
       "Sales Owner": selected.sales && selected.sales !== "—" ? selected.sales : "",
       "Start Date": toDateInputValue(selected.start),
       "Due Date": toDateInputValue(selected.due),
@@ -891,11 +926,12 @@ export default function App() {
   }
 
   async function saveProjectEdit() {
+    const serialize = (key, value) => (key === "PM" && Array.isArray(value) ? value.join(", ") : value);
     const changed = {};
     Object.keys(projectEditFields).forEach((key) => {
-      if (projectEditFields[key] !== originalProjectFields[key]) {
-        changed[key] = projectEditFields[key];
-      }
+      const newVal = serialize(key, projectEditFields[key]);
+      const oldVal = serialize(key, originalProjectFields[key]);
+      if (newVal !== oldVal) changed[key] = newVal;
     });
     if (Object.keys(changed).length === 0) {
       setEditingProject(false);
@@ -1014,11 +1050,15 @@ export default function App() {
       const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "addProject", user: currentUser, project: newProject }),
+        body: JSON.stringify({
+          action: "addProject",
+          user: currentUser,
+          project: { ...newProject, pm: newProject.pm.join(", ") },
+        }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setNewProject({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", type: PROJECT_TYPES[0] });
+      setNewProject({ name: "", pm: [PM_USERS[0]], sales: "", start: "", due: "", type: PROJECT_TYPES[0] });
       setShowAddProjectForm(false);
       await loadProjects();
       if (data.projectId) setSelectedId(data.projectId);
@@ -1373,15 +1413,12 @@ export default function App() {
                     onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
                     style={{ flex: 1, minWidth: 220, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
                   />
-                  <select
-                    value={newProject.pm}
-                    onChange={(e) => setNewProject({ ...newProject, pm: e.target.value })}
-                    style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, background: C.bg }}
-                  >
-                    {PM_USERS.map((u) => (
-                      <option key={u} value={u}>{u}</option>
-                    ))}
-                  </select>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10.5, letterSpacing: 0.4, color: C.inkFaint, textTransform: "uppercase", marginBottom: 6 }}>
+                    PM (เลือกได้มากกว่า 1 คน)
+                  </div>
+                  <PMMultiSelect value={newProject.pm} onChange={(arr) => setNewProject({ ...newProject, pm: arr })} />
                 </div>
                 <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
                   <input
