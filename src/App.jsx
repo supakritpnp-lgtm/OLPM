@@ -682,6 +682,7 @@ export default function App() {
   const [detailTab, setDetailTab] = useState("overview"); // "overview" | "task"
   const [editingProject, setEditingProject] = useState(false);
   const [projectEditFields, setProjectEditFields] = useState({});
+  const [originalProjectFields, setOriginalProjectFields] = useState({});
   const [savingProjectEdit, setSavingProjectEdit] = useState(false);
   const [newProject, setNewProject] = useState({ name: "", pm: PM_USERS[0], sales: "", start: "", due: "", type: PROJECT_TYPES[0] });
   const [addingProject, setAddingProject] = useState(false);
@@ -857,7 +858,7 @@ export default function App() {
 
   function startEditProject() {
     if (!selected) return;
-    setProjectEditFields({
+    const snapshot = {
       Type: selected.type || "",
       "Project name": selected.name || "",
       PM: selected.pm && selected.pm !== "—" ? selected.pm : "",
@@ -879,7 +880,9 @@ export default function App() {
       "Platform Customize": !!selected.platformCustomize,
       "Platform Dev Detail": selected.platformDevDetail || "",
       "Project Note": selected.note || "",
-    });
+    };
+    setProjectEditFields(snapshot);
+    setOriginalProjectFields(snapshot);
     setEditingProject(true);
   }
 
@@ -888,6 +891,16 @@ export default function App() {
   }
 
   async function saveProjectEdit() {
+    const changed = {};
+    Object.keys(projectEditFields).forEach((key) => {
+      if (projectEditFields[key] !== originalProjectFields[key]) {
+        changed[key] = projectEditFields[key];
+      }
+    });
+    if (Object.keys(changed).length === 0) {
+      setEditingProject(false);
+      return;
+    }
     setSavingProjectEdit(true);
     setError(null);
     try {
@@ -898,7 +911,7 @@ export default function App() {
           action: "editProjectDetail",
           projectId: selectedId,
           user: currentUser,
-          fields: projectEditFields,
+          fields: changed,
         }),
       });
       const data = await res.json();
