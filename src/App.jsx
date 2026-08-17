@@ -17,8 +17,10 @@ import {
   X,
   Check,
   Menu,
+  FileDown,
 } from "lucide-react";
 import { API_URL } from "./config.js";
+import { exportPptx } from "./exportPptx.js";
 
 // ---------------------------------------------------------------------------
 // Helpers to normalize rows coming back from Apps Script (raw sheet headers)
@@ -634,13 +636,36 @@ function WorkLoadRow({ pm, projectItems, solutionItems }) {
   );
 }
 
-function DashboardView({ projects, onSelectProject }) {
+function DashboardView({ projects, onSelectProject, onExport, exporting }) {
   const projectItems = useMemo(() => projects.filter((p) => p.type === "Project"), [projects]);
   const solutionItems = useMemo(() => projects.filter((p) => p.type === "Solution"), [projects]);
 
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "24px var(--page-px) var(--page-px)" }}>
-      <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 16px", letterSpacing: -0.2 }}>Project Dashboard</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: -0.2 }}>Project Dashboard</h2>
+        <button
+          onClick={onExport}
+          disabled={exporting}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            padding: "8px 16px",
+            borderRadius: 8,
+            border: `1px solid ${C.border}`,
+            background: C.surface,
+            color: C.ink,
+            fontSize: 12.5,
+            fontWeight: 600,
+            opacity: exporting ? 0.6 : 1,
+            boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+          }}
+        >
+          <FileDown size={14} />
+          {exporting ? "กำลังสร้างไฟล์..." : "Export PowerPoint"}
+        </button>
+      </div>
 
       <div className="dash-two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28 }}>
         <DashboardCategoryPanel title="Project" items={projectItems} onSelect={onSelectProject} />
@@ -716,6 +741,7 @@ export default function App() {
   const [showAddProjectForm, setShowAddProjectForm] = useState(false);
   const [detailTab, setDetailTab] = useState("overview"); // "overview" | "task"
   const [editingProject, setEditingProject] = useState(false);
+  const [exportingPptx, setExportingPptx] = useState(false);
   const [projectEditFields, setProjectEditFields] = useState({});
   const [originalProjectFields, setOriginalProjectFields] = useState({});
   const [savingProjectEdit, setSavingProjectEdit] = useState(false);
@@ -852,6 +878,22 @@ export default function App() {
     }
     if (selectedId) loadTasks(selectedId);
     loadProjects();
+  }
+
+  async function handleExportPptx() {
+    setExportingPptx(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}?action=alltasks`);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const tasksByProjectId = await res.json();
+      if (tasksByProjectId.error) throw new Error(tasksByProjectId.error);
+      await exportPptx({ projects, tasksByProjectId, pmUsers: PM_USERS });
+    } catch (err) {
+      setError("สร้างไฟล์ PowerPoint ไม่สำเร็จ: " + err.message);
+    } finally {
+      setExportingPptx(false);
+    }
   }
 
   async function submitNewTask() {
@@ -1362,6 +1404,8 @@ export default function App() {
               setSelectedId(id);
               setMode("projects");
             }}
+            onExport={handleExportPptx}
+            exporting={exportingPptx}
           />
         ) : mode === "log" ? (
           <LogView entries={logEntries} loading={loadingLog} onBack={() => setMode("projects")} />
