@@ -57,6 +57,10 @@ function doPost(e) {
       result = editProjectDetail(body.projectId, body.fields);
       if (!result.error) logAction(user, "แก้ไขรายละเอียดโปรเจกต์", body.projectId, Object.keys(body.fields || {}).join(", "));
       break;
+    case "deleteProject":
+      result = deleteProject(body.projectId);
+      if (!result.error) logAction(user, "ลบโปรเจกต์", body.projectId, "");
+      break;
     default:
       return respond({ error: "unknown action" });
   }
@@ -100,9 +104,17 @@ function addProject(project) {
     "Task progress": 0,
   };
   const row = headers.map((h) => (fieldMap[h] !== undefined ? fieldMap[h] : ""));
-  overview.appendRow(row);
 
-  const newRowIndex = overview.getLastRow();
+  // สำคัญ: ห้ามใช้ overview.appendRow() ตรงๆ เพราะ sheet.getLastRow() นับรวมแถวที่มีแค่สูตร/
+  // ฟอร์แมตติดอยู่ (เช่นคอลัมน์ Task progress ที่มีสูตร IFERROR ลากไว้ล่วงหน้าเป็นร้อยๆ แถว)
+  // ทำให้แถวใหม่กระโดดไปต่อท้ายแถวที่ไม่มีข้อมูลจริงแทน — ต้องหาแถวสุดท้ายที่มี Project ID
+  // จริงๆ ก่อน แล้วแทรกแถวใหม่ต่อจากแถวนั้นแทน
+  const idColForInsert = headers.indexOf("Project ID") + 1;
+  const lastDataRow = getLastRealDataRow(overview, idColForInsert);
+  overview.insertRowAfter(lastDataRow);
+  const newRowIndex = lastDataRow + 1;
+  overview.getRange(newRowIndex, 1, 1, row.length).setValues([row]);
+
   const numCols = headers.length;
 
   // 1.2 ตีกรอบล้อมทั้งแถวใหม่ (คอลัมน์ A ถึงคอลัมน์สุดท้าย = Task progress = X)
@@ -180,6 +192,50 @@ function editProjectDetail(projectId, fields) {
   });
 
   return { ok: true };
+}
+
+/**
+ * ลบโปรเจกต์ทั้งอัน: ลบแถวใน Overview ที่มี Project ID ตรงกับ projectId
+ * และลบชีตเก็บ task ของโปรเจกต์นั้น (ชื่อชีต = projectId) ทิ้งไปด้วย
+ * หมายเหตุ: ถ้ามีแถวซ้ำ Project ID เดียวกันมากกว่า 1 แถว จะลบแค่แถวแรกที่เจอ
+ */
+function deleteProject(projectId) {
+  const overview = SpreadsheetApp.getActive().getSheetByName(SHEET_OVERVIEW);
+  const headers = overview.getRange(1, 1, 1, overview.getLastColumn()).getValues()[0];
+  const idCol = headers.indexOf("Project ID") + 1;
+  if (idCol === 0) return { error: "ไม่พบคอลัมน์ Project ID ใน Overview" };
+
+  const lastRow = overview.getLastRow();
+  if (lastRow < 2) return { error: "ไม่พบโปรเจกต์ " + projectId };
+  const ids = overview.getRange(2, idCol, lastRow - 1, 1).getValues().flat();
+  const offset = ids.indexOf(projectId);
+  if (offset === -1) return { error: "ไม่พบโปรเจกต์ " + projectId };
+  const rowIndex = offset + 2;
+
+  overview.deleteRow(rowIndex);
+
+  const ss = SpreadsheetApp.getActive();
+  const taskSheet = ss.getSheetByName(projectId);
+  if (taskSheet) ss.deleteSheet(taskSheet);
+
+  return { ok: true };
+}
+
+/**
+ * หาแถวสุดท้ายที่มี "Project ID" จริงๆ (ไม่ใช่ sheet.getLastRow() ตรงๆ)
+ * เพราะ getLastRow() นับรวมแถวที่มีแค่สูตร/ฟอร์แมตติดอยู่ (เช่นคอลัมน์ Task progress
+ * ที่มีสูตร IFERROR ลากไว้ล่วงหน้าเป็นร้อยๆ แถวโดยไม่มีข้อมูลโปรเจกต์จริง) ทำให้แถวใหม่
+ * ที่ควรจะต่อจากแถวข้อมูลจริง กลับกระโดดไปไกลเกินจำเป็น
+ */
+function getLastRealDataRow(overview, idColIndex) {
+  const lastRow = overview.getLastRow();
+  if (lastRow < 2) return 1; // มีแค่แถวหัวตาราง
+  const ids = overview.getRange(2, idColIndex, lastRow - 1, 1).getValues().flat();
+  let lastReal = 1;
+  ids.forEach((id, i) => {
+    if (id !== "" && id !== null && id !== undefined) lastReal = i + 2;
+  });
+  return lastReal;
 }
 
 function generateProjectId(overview, headers) {

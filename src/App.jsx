@@ -745,6 +745,7 @@ export default function App() {
   const [projectEditFields, setProjectEditFields] = useState({});
   const [originalProjectFields, setOriginalProjectFields] = useState({});
   const [savingProjectEdit, setSavingProjectEdit] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(false);
   const [newProject, setNewProject] = useState({ name: "", pm: [PM_USERS[0]], sales: "", start: "", due: "", type: PROJECT_TYPES[0] });
   const [addingProject, setAddingProject] = useState(false);
 
@@ -966,6 +967,31 @@ export default function App() {
   function cancelEditProject() {
     setEditingProject(false);
   }
+
+  async function handleDeleteProject() {
+    if (!selected) return;
+    const confirmText = `ลบโปรเจกต์ "${selected.name}" (${selected.id}) ทั้งหมด?\n\nจะลบทั้งข้อมูลโปรเจกต์และชีตงานที่เกี่ยวข้องออกจาก Google Sheet ถาวร กู้คืนไม่ได้`;
+    if (!window.confirm(confirmText)) return;
+    setDeletingProject(true);
+    setError(null);
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "deleteProject", projectId: selected.id, user: currentUser }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setSelectedId(null);
+      setMode("dashboard");
+      await loadProjects();
+    } catch (err) {
+      setError("ลบโปรเจกต์ไม่สำเร็จ: " + err.message);
+    } finally {
+      setDeletingProject(false);
+    }
+  }
+
 
   async function saveProjectEdit() {
     const serialize = (key, value) => (key === "PM" && Array.isArray(value) ? value.join(", ") : value);
@@ -1632,12 +1658,21 @@ export default function App() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={startEditProject}
-                      style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.accent}`, background: "transparent", color: C.accent, fontSize: 12.5, fontWeight: 600 }}
-                    >
-                      <Pencil size={13} /> แก้ไขข้อมูล
-                    </button>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={handleDeleteProject}
+                        disabled={deletingProject}
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.red}`, background: "transparent", color: C.red, fontSize: 12.5, fontWeight: 600, opacity: deletingProject ? 0.6 : 1 }}
+                      >
+                        <Trash2 size={13} /> {deletingProject ? "กำลังลบ..." : "ลบโปรเจกต์"}
+                      </button>
+                      <button
+                        onClick={startEditProject}
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.accent}`, background: "transparent", color: C.accent, fontSize: 12.5, fontWeight: 600 }}
+                      >
+                        <Pencil size={13} /> แก้ไขข้อมูล
+                      </button>
+                    </div>
                   )}
                 </div>
                 {editingProject ? (
