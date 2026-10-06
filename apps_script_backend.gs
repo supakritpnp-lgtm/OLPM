@@ -1,4 +1,14 @@
 /**
+ * ⚠️ ไฟล์นี้เลิกใช้งานแล้ว (deprecated) — เก็บไว้แค่อ้างอิง/เผื่อต้องย้อนกลับมาใช้
+ *
+ * ตั้งแต่ย้ายมาใช้ Netlify Functions (ดู netlify/functions/) เว็บนี้ไม่เรียกใช้ Apps Script
+ * Web App นี้อีกต่อไปแล้ว ไม่ต้อง deploy ไฟล์นี้ซ้ำอีก และลบ Web App deployment เดิมทิ้งได้เลย
+ * (Google Sheet ตัวเดียวกันยังใช้เป็นฐานข้อมูลเหมือนเดิม แค่เว็บคุยกับมันผ่านทางอื่นแทน)
+ *
+ * โค้ด logic ทั้งหมดในไฟล์นี้ถูกพอร์ตไปไว้ที่ netlify/functions/lib/logic.js แล้ว
+ */
+
+/**
  * Backend สำหรับ Web ติดตามงานภายใน — วางโค้ดนี้ใน Google Apps Script
  * (Extensions > Apps Script ในไฟล์ Google Sheet ของคุณ) แล้ว Deploy เป็น Web App
  *
@@ -73,9 +83,17 @@ function doPost(e) {
 
 function getOverview() {
   const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_OVERVIEW);
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
-  return values.slice(1).map((row) => rowToObject(headers, row));
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  // สำคัญ: ใช้ getLastRealDataRow() แทน getDataRange()/getLastRow() ตรงๆ เพราะคอลัมน์
+  // Task progress เป็นสูตร IFERROR(...INDIRECT...) ซึ่งเป็นสูตร "volatile" (คำนวณใหม่ทุกครั้ง
+  // ที่มีการอ่านค่า) ถ้ายังมีแถวสูตรค้างอยู่หลายร้อยแถวโดยไม่มีข้อมูลจริง การอ่านทั้ง sheet
+  // ทุกครั้งที่ sync จะบังคับให้ Sheets คำนวณสูตรเหล่านั้นใหม่หมด ทำให้ sync ช้าลงเรื่อยๆ
+  // การจำกัดช่วงที่อ่านให้เหลือแค่แถวที่มีข้อมูลจริงช่วยตัดปัญหานี้โดยไม่ต้องพึ่งการเคลียร์ชีตเอง
+  const idCol = headers.indexOf("Project ID") + 1;
+  const lastRow = getLastRealDataRow(sheet, idCol);
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  return values.map((row) => rowToObject(headers, row));
 }
 
 /**
@@ -311,7 +329,13 @@ function addTask(projectId, task) {
   const sheet = SpreadsheetApp.getActive().getSheetByName(projectId);
   if (!sheet) return { error: "ไม่พบโปรเจกต์ " + projectId };
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const row = headers.map((h) => (task[h] !== undefined ? task[h] : ""));
+  // Start/Due ต้องแปลงเป็น Date object จริงๆ ก่อนเขียน ไม่งั้นจะถูกเก็บเป็นข้อความธรรมดา
+  // ทำให้ฟอร์แมตวันที่ d-mmm ที่ตั้งไว้ล่วงหน้าในคอลัมน์นี้ไม่แสดงผล
+  const row = headers.map((h) => {
+    const v = task[h] !== undefined ? task[h] : "";
+    if ((h === "Start" || h === "Due") && v) return new Date(v);
+    return v;
+  });
   sheet.appendRow(row);
   return { ok: true, rowIndex: sheet.getLastRow() };
 }
@@ -322,7 +346,10 @@ function editTask(projectId, rowIndex, fields) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   Object.keys(fields).forEach((key) => {
     const col = headers.indexOf(key) + 1;
-    if (col > 0) sheet.getRange(rowIndex, col).setValue(fields[key]);
+    if (col === 0) return;
+    let value = fields[key];
+    if ((key === "Start" || key === "Due") && value) value = new Date(value);
+    sheet.getRange(rowIndex, col).setValue(value);
   });
   return { ok: true };
 }

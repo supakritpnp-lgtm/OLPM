@@ -1,8 +1,21 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
 
+[functions]
+  node_bundler = "esbuild"
+
+# ให้หน้าเว็บ React (client-side routing) ทำงานถูกต้องเวลา refresh หน้าไหนก็ตาม
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+# สำหรับรันในเครื่องด้วย `netlify dev` — จะรัน Vite dev server (คำสั่งด้านล่าง) ควบคู่กับ
+# Netlify Functions ให้เอง ทั้งสองอย่างจะอยู่โดเมนเดียวกันเหมือนตอน deploy จริง (localhost:8888)
+[dev]
+  command = "npm run vite:dev"
+  targetPort = 5173
+  port = 8888
+  framework = "#custom"

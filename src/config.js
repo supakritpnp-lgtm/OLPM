@@ -1,4 +1,4 @@
-// URL ของ Google Apps Script Web App (ลงท้ายด้วย /exec)
-// ถ้าคุณ deploy เวอร์ชันใหม่ในอนาคต ให้มาแก้ค่านี้ที่เดียว
-export const API_URL =
-  "https://script.google.com/macros/s/AKfycbxuyUEtApRfqwpdmAFH5H4z6CaCr596SMauO7kKrLesd-wb70KUBFeS_5_dIT9Cb4IILw/exec";
+// URL ของ API — ตอนนี้เป็น Netlify Function (คุยกับ Google Sheets ตรงๆ ผ่าน Service Account)
+// ไม่ใช่ Google Apps Script Web App อีกต่อไป — ไม่มีปัญหา deployment หลุด/URL หมดอายุอีกแล้ว
+// path นี้ใช้ได้ทั้งตอน deploy จริงบน Netlify และตอนรัน `netlify dev` ในเครื่อง (โดเมนเดียวกันเสมอ)
+export const API_URL = "/.netlify/functions/api";

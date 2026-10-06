@@ -54,6 +54,44 @@ function normalizeProject(row) {
   };
 }
 
+// key ตามชื่อคอลัมน์จริงในชีต -> [ชื่อฟิลด์ที่ใช้ในแอป, ฟังก์ชันแปลงค่า]
+// ใช้สำหรับอัปเดต state ในเครื่อง (optimistic update) หลังบันทึกสำเร็จ โดยไม่ต้อง
+// โหลด Overview ใหม่ทั้งชีต (ซึ่งอาจช้าถ้าชีตมีสูตรจำนวนมาก) — ปุ่ม Sync ยังใช้โหลดสดได้ตามปกติ
+const PROJECT_PATCH_MAP = {
+  "Project name": ["name", (v) => v || "(ไม่มีชื่อ)"],
+  Type: ["type", (v) => v || ""],
+  PM: ["pm", (v) => v || "—"],
+  "Sales Owner": ["sales", (v) => v || "—"],
+  "Start Date": ["start", (v) => v],
+  "Due Date": ["due", (v) => v],
+  "Project Volume": ["volume", (v) => v],
+  "Project Value": ["value", (v) => Number(v) || 0],
+  "Project Cost": ["cost", (v) => Number(v) || 0],
+  "Project Benefit": ["benefit", (v) => v],
+  "Sale brief": ["saleBrief", (v) => v === true],
+  "Contract/PO": ["contractPO", (v) => v === true],
+  GPS: ["gps", (v) => v || ""],
+  "GPS Option": ["gpsOption", (v) => v || ""],
+  MDVR: ["mdvr", (v) => v || ""],
+  "MDVR Option": ["mdvrOption", (v) => v || ""],
+  Other: ["other", (v) => v || ""],
+  Platform: ["platform", (v) => v || ""],
+  "Platform Customize": ["platformCustomize", (v) => v === true],
+  "Platform Dev Detail": ["platformDevDetail", (v) => v || ""],
+  "Project Note": ["note", (v) => v || ""],
+};
+
+function applyProjectPatch(project, changedByHeader) {
+  const patch = {};
+  Object.keys(changedByHeader).forEach((header) => {
+    const mapping = PROJECT_PATCH_MAP[header];
+    if (!mapping) return;
+    const [field, transform] = mapping;
+    patch[field] = transform(changedByHeader[header]);
+  });
+  return { ...project, ...patch };
+}
+
 function normalizeTask(row) {
   return {
     rowIndex: row.rowIndex,
@@ -63,6 +101,8 @@ function normalizeTask(row) {
     name: row["Task Name"] || "(ไม่มีชื่องาน)",
     link: row["Link"] || "",
     detail: row["Task Detail"] || "",
+    start: row["Start"] || "",
+    due: row["Due"] || "",
   };
 }
 
@@ -153,7 +193,7 @@ const fieldInputStyle = {
 function LabeledInput({ label, children }) {
   return (
     <label style={{ display: "block", marginBottom: 10 }}>
-      <div style={{ fontSize: 10.5, letterSpacing: 0.4, color: C.inkFaint, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 10.5, letterSpacing: 0.4, color: "#54565A", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
       {children}
     </label>
   );
@@ -732,10 +772,10 @@ export default function App() {
   const [lastSync, setLastSync] = useState(null);
   const [savingRow, setSavingRow] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newTask, setNewTask] = useState({ type: "Request", name: "", detail: "", link: "" });
+  const [newTask, setNewTask] = useState({ type: "Request", name: "", detail: "", link: "", start: "", due: "" });
   const [addingTask, setAddingTask] = useState(false);
   const [editingRowIndex, setEditingRowIndex] = useState(null);
-  const [editFields, setEditFields] = useState({ type: "", name: "", detail: "", link: "" });
+  const [editFields, setEditFields] = useState({ type: "", name: "", detail: "", link: "", start: "", due: "" });
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingRow, setDeletingRow] = useState(null);
   const [showAddProjectForm, setShowAddProjectForm] = useState(false);
@@ -753,7 +793,7 @@ export default function App() {
     setLoadingProjects(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}?action=overview`);
+      const res = await fetch(`${API_URL}?action=overview&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -770,7 +810,7 @@ export default function App() {
     setLoadingTasks(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}?action=tasks&projectId=${encodeURIComponent(projectId)}`);
+      const res = await fetch(`${API_URL}?action=tasks&projectId=${encodeURIComponent(projectId)}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -786,7 +826,7 @@ export default function App() {
     setLoadingLog(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}?action=log&limit=200`);
+      const res = await fetch(`${API_URL}?action=log&limit=200&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -885,7 +925,7 @@ export default function App() {
     setExportingPptx(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}?action=alltasks`);
+      const res = await fetch(`${API_URL}?action=alltasks&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const tasksByProjectId = await res.json();
       if (tasksByProjectId.error) throw new Error(tasksByProjectId.error);
@@ -919,12 +959,14 @@ export default function App() {
             "Task Name": newTask.name,
             Link: newTask.link,
             "Task Detail": newTask.detail,
+            Start: newTask.start,
+            Due: newTask.due,
           },
         }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setNewTask({ type: "Request", name: "", detail: "", link: "" });
+      setNewTask({ type: "Request", name: "", detail: "", link: "", start: "", due: "" });
       setShowAddForm(false);
       await loadTasks(selectedId);
     } catch (err) {
@@ -1020,7 +1062,8 @@ export default function App() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      await loadProjects();
+      setProjects((prev) => prev.map((p) => (p.id === selectedId ? applyProjectPatch(p, changed) : p)));
+      setLastSync(new Date());
       setEditingProject(false);
     } catch (err) {
       setError("บันทึกข้อมูลโปรเจกต์ไม่สำเร็จ: " + err.message);
@@ -1031,7 +1074,14 @@ export default function App() {
 
   function startEdit(task) {
     setEditingRowIndex(task.rowIndex);
-    setEditFields({ type: task.type, name: task.name, detail: task.detail, link: task.link });
+    setEditFields({
+      type: task.type,
+      name: task.name,
+      detail: task.detail,
+      link: task.link,
+      start: toDateInputValue(task.start),
+      due: toDateInputValue(task.due),
+    });
   }
 
   function cancelEdit() {
@@ -1059,6 +1109,8 @@ export default function App() {
             "Task Name": editFields.name,
             Link: editFields.link,
             "Task Detail": editFields.detail,
+            Start: editFields.start,
+            Due: editFields.due,
           },
         }),
       });
@@ -1067,7 +1119,7 @@ export default function App() {
       setTasks((prev) =>
         prev.map((t) =>
           t.rowIndex === rowIndex
-            ? { ...t, type: editFields.type, name: editFields.name, link: editFields.link, detail: editFields.detail }
+            ? { ...t, type: editFields.type, name: editFields.name, link: editFields.link, detail: editFields.detail, start: editFields.start, due: editFields.due }
             : t
         )
       );
@@ -1728,35 +1780,66 @@ export default function App() {
             {showAddForm && (
               <div style={{ margin: "14px var(--page-px) 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}>
                 <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-                  <select
-                    value={newTask.type}
-                    onChange={(e) => setNewTask({ ...newTask, type: e.target.value })}
-                    style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, background: C.bg }}
-                  >
-                    {["CR", "Request", "Bug", "Sol"].map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                  <input
-                    placeholder="ชื่องาน"
-                    value={newTask.name}
-                    onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
-                    style={{ flex: 1, minWidth: 200, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
-                  />
+                  <LabeledInput label="ประเภท">
+                    <select
+                      value={newTask.type}
+                      onChange={(e) => setNewTask({ ...newTask, type: e.target.value })}
+                      style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, background: C.bg }}
+                    >
+                      {["CR", "Request", "Bug", "Sol"].map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </LabeledInput>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <LabeledInput label="ชื่องาน">
+                      <input
+                        value={newTask.name}
+                        onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
+                        style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                      />
+                    </LabeledInput>
+                  </div>
                 </div>
-                <input
-                  placeholder="ลิงก์ (ClickUp ฯลฯ) — ไม่บังคับ"
-                  value={newTask.link}
-                  onChange={(e) => setNewTask({ ...newTask, link: e.target.value })}
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, marginBottom: 10 }}
-                />
-                <textarea
-                  placeholder="รายละเอียดเพิ่มเติม — ไม่บังคับ"
-                  value={newTask.detail}
-                  onChange={(e) => setNewTask({ ...newTask, detail: e.target.value })}
-                  rows={2}
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, fontFamily: "inherit", resize: "vertical", marginBottom: 12 }}
-                />
+                <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 140 }}>
+                    <LabeledInput label="วันเริ่ม (ไม่บังคับ)">
+                      <input
+                        type="date"
+                        value={newTask.start}
+                        onChange={(e) => setNewTask({ ...newTask, start: e.target.value })}
+                        style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                      />
+                    </LabeledInput>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 140 }}>
+                    <LabeledInput label="วันครบกำหนด (ไม่บังคับ)">
+                      <input
+                        type="date"
+                        value={newTask.due}
+                        onChange={(e) => setNewTask({ ...newTask, due: e.target.value })}
+                        style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                      />
+                    </LabeledInput>
+                  </div>
+                </div>
+                <LabeledInput label="ลิงก์ (ClickUp ฯลฯ — ไม่บังคับ)">
+                  <input
+                    value={newTask.link}
+                    onChange={(e) => setNewTask({ ...newTask, link: e.target.value })}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                  />
+                </LabeledInput>
+                <div style={{ marginTop: 10, marginBottom: 12 }}>
+                  <LabeledInput label="รายละเอียดเพิ่มเติม (ไม่บังคับ)">
+                    <textarea
+                      value={newTask.detail}
+                      onChange={(e) => setNewTask({ ...newTask, detail: e.target.value })}
+                      rows={2}
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, fontFamily: "inherit", resize: "vertical" }}
+                    />
+                  </LabeledInput>
+                </div>
                 <button
                   onClick={submitNewTask}
                   disabled={addingTask}
@@ -1784,34 +1867,68 @@ export default function App() {
                           style={{ background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 10, padding: 14, boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}
                         >
                           <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-                            <select
-                              value={editFields.type}
-                              onChange={(e) => setEditFields({ ...editFields, type: e.target.value })}
-                              style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, background: C.bg }}
-                            >
-                              {["CR", "Request", "Bug", "Sol"].map((tp) => (
-                                <option key={tp} value={tp}>{tp}</option>
-                              ))}
-                            </select>
-                            <input
-                              value={editFields.name}
-                              onChange={(e) => setEditFields({ ...editFields, name: e.target.value })}
-                              style={{ flex: 1, minWidth: 200, padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
-                            />
+                            <LabeledInput label="ประเภท">
+                              <select
+                                value={editFields.type}
+                                onChange={(e) => setEditFields({ ...editFields, type: e.target.value })}
+                                style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, background: C.bg }}
+                              >
+                                {["CR", "Request", "Bug", "Sol"].map((tp) => (
+                                  <option key={tp} value={tp}>{tp}</option>
+                                ))}
+                              </select>
+                            </LabeledInput>
+                            <div style={{ flex: 1, minWidth: 200 }}>
+                              <LabeledInput label="ชื่องาน">
+                                <input
+                                  value={editFields.name}
+                                  onChange={(e) => setEditFields({ ...editFields, name: e.target.value })}
+                                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                                />
+                              </LabeledInput>
+                            </div>
                           </div>
-                          <input
-                            placeholder="ลิงก์"
-                            value={editFields.link}
-                            onChange={(e) => setEditFields({ ...editFields, link: e.target.value })}
-                            style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, marginBottom: 10 }}
-                          />
-                          <textarea
-                            placeholder="รายละเอียด"
-                            value={editFields.detail}
-                            onChange={(e) => setEditFields({ ...editFields, detail: e.target.value })}
-                            rows={2}
-                            style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, fontFamily: "inherit", resize: "vertical", marginBottom: 12 }}
-                          />
+                          <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                            <div style={{ flex: 1, minWidth: 140 }}>
+                              <LabeledInput label="วันเริ่ม">
+                                <input
+                                  type="date"
+                                  value={editFields.start}
+                                  onChange={(e) => setEditFields({ ...editFields, start: e.target.value })}
+                                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                                />
+                              </LabeledInput>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 140 }}>
+                              <LabeledInput label="วันครบกำหนด">
+                                <input
+                                  type="date"
+                                  value={editFields.due}
+                                  onChange={(e) => setEditFields({ ...editFields, due: e.target.value })}
+                                  style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                                />
+                              </LabeledInput>
+                            </div>
+                          </div>
+                          <LabeledInput label="ลิงก์">
+                            <input
+                              placeholder="ลิงก์"
+                              value={editFields.link}
+                              onChange={(e) => setEditFields({ ...editFields, link: e.target.value })}
+                              style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink }}
+                            />
+                          </LabeledInput>
+                          <div style={{ marginTop: 10, marginBottom: 12 }}>
+                            <LabeledInput label="รายละเอียด">
+                              <textarea
+                                placeholder="รายละเอียด"
+                                value={editFields.detail}
+                                onChange={(e) => setEditFields({ ...editFields, detail: e.target.value })}
+                                rows={2}
+                                style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, color: C.ink, fontFamily: "inherit", resize: "vertical" }}
+                              />
+                            </LabeledInput>
+                          </div>
                           <div style={{ display: "flex", gap: 8 }}>
                             <button
                               onClick={() => saveEdit(t.rowIndex)}
